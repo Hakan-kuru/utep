@@ -4,7 +4,7 @@
 
 Bu use case, kulüp yöneticilerinin kendi kulüplerine ait etkinliklere yapılan öğrenci başvurularını görüntülemesini ve başvuruların durumlarını yönetmesini tanımlar.
 
-Başvuruların kabul edilmesi, reddedilmesi, bekleme listelerinin otomatik olarak işlenmesi ve gerekli durumlarda daha önce verilmiş kararların düzeltilmesi bu use case kapsamındadır.
+Başvuruların kabul edilmesi, reddedilmesi, gerekli durumlarda öğrencilerin yedek listeye alınması, yedek listenin otomatik olarak işlenmesi ve gerekli durumlarda daha önce verilmiş kararların düzeltilmesi bu use case kapsamındadır.
 
 Bildirimlerin gönderilmesi bu use case'in kapsamında değildir. Bildirim davranışları ayrı bir use case'te ele alınacaktır.
 
@@ -27,7 +27,7 @@ Bu üç rol de kulübün etkinlik başvurularını yönetebilir.
 
 Öğrenci başvurunun sonucundan etkilenir ancak başvuru yönetimini gerçekleştirmez.
 
-Sistem ise kapasite, bekleme listesi ve ban gibi kuralları otomatik olarak uygular.
+Sistem ise başvuru tipi, kapasite ve yedek liste gibi kuralları otomatik olarak uygular.
 
 ---
 
@@ -46,34 +46,57 @@ Bir etkinlik başvurusu aşağıdaki durumlardan birinde bulunabilir:
 
 ```text
 PENDING
+
 ACCEPTED
+
 REJECTED
+
 WAITLISTED
+
+WITHDRAWN
 ```
 
 ### PENDING
 
-Başvuru yapılmış ancak kulüp tarafından henüz kabul veya ret kararı verilmemiştir.
+Başvuru yapılmış ancak henüz kesin bir kabul veya ret kararı verilmemiştir.
 
-`APPROVAL_REQUIRED` etkinliklerde kullanılır.
+`APPROVAL_REQUIRED` etkinliklerde başvurular yönetici tarafından değerlendirilmek üzere `PENDING` durumunda tutulur.
+
+`PUBLIC` etkinliklerde ise başvuru sistemi tarafından otomatik olarak değerlendirilir. Başvuru koşulları uygunsa `ACCEPTED` durumuna geçer; kapasite sınırı bulunan etkinliklerde kapasite dolmuşsa `WAITLISTED` durumuna geçebilir.
 
 ### ACCEPTED
 
 Öğrencinin etkinliğe katılımı kabul edilmiştir.
 
-`PUBLIC` etkinliklerde kapasite uygunsa başvuru doğrudan bu duruma geçebilir.
+`PUBLIC` etkinliklerde uygun başvurular sistem tarafından otomatik olarak bu duruma geçirilebilir.
+
+`APPROVAL_REQUIRED` etkinliklerde ise yönetici tarafından verilen kabul kararı sonucunda bu duruma geçilir.
 
 ### REJECTED
 
 Başvuru reddedilmiştir.
 
-Reddedilen öğrenci aynı etkinliğe tekrar başvuramaz.
+Yönetici gerekli durumlarda `REJECTED` durumundaki bir başvuruyu tekrar kabul edebilir. Bkz. Bölüm 8.
 
 ### WAITLISTED
 
-Etkinliğin kapasitesi dolu olduğu için öğrenci bekleme listesine alınmıştır.
+Öğrenci etkinliğe katılmak için yedek listede bulunmaktadır.
 
-Bekleme listesindeki öğrenciler manuel olarak seçilmez. Kapasite açıldığında sistem başvuru zamanına göre otomatik olarak işlem yapar.
+Yedek liste özellikle kapasitesi bulunan ve başvuruların yönetici tarafından değerlendirildiği etkinliklerde kullanılabilir.
+
+Yedek listedeki öğrenciler yönetici tarafından belirlenir ve başvuru zamanına göre sıralanır.
+
+Kapasite açıldığında sistem yedek listedeki ilk öğrenciyi otomatik olarak `ACCEPTED` durumuna geçirir.
+
+### WITHDRAWN
+
+Öğrenci başvurusunu etkinlik başlamadan önce geri çekmiştir.
+
+`WITHDRAWN` durumundaki bir başvurunun yönetici tarafından ayrıca işleme alınması gerekmez.
+
+`BAN` bir application status değildir.
+
+`NOT_ATTENDED` bir application status değildir; attendance ayrı bir kavramdır.
 
 ---
 
@@ -83,10 +106,11 @@ Kulüp yöneticisi kendi etkinliklerinden birini seçerek o etkinliğe ait başv
 
 Başvurular durumlarına göre filtrelenebilir:
 
-* Bekleyenler
-* Kabul edilenler
-* Reddedilenler
-* Bekleme listesindekiler
+* Bekleyenler (`PENDING`)
+* Kabul edilenler (`ACCEPTED`)
+* Reddedilenler (`REJECTED`)
+* Yedek listedekiler (`WAITLISTED`)
+* Geri çekilenler (`WITHDRAWN`)
 
 Başvuru listesinde en azından aşağıdaki bilgiler bulunmalıdır:
 
@@ -96,16 +120,25 @@ Başvuru listesinde en azından aşağıdaki bilgiler bulunmalıdır:
 * Başvuru durumunun değişme tarihi
 * Varsa ret nedeni
 
+Yönetici özellikle `APPROVAL_REQUIRED` etkinliklerde `PENDING` başvuruları değerlendirerek öğrencileri kabul edebilir, reddedebilir veya gerekli görürse yedek listeye alabilir.
+
 ---
 
 # 6. PENDING Başvurunun Yönetilmesi
 
-Bir başvuru `PENDING` durumundaysa kulüp yöneticisi iki işlem yapabilir:
+Bir başvuru `PENDING` durumundaysa kulüp yöneticisi, etkinliğin başvuru tipine göre işlem yapar.
+
+`APPROVAL_REQUIRED` etkinliklerde yönetici:
 
 ```text
 PENDING → ACCEPTED
+
 PENDING → REJECTED
+
+PENDING → WAITLISTED
 ```
+
+geçişlerinden uygun olanını gerçekleştirebilir.
 
 ### 6.1. Kabul
 
@@ -117,7 +150,9 @@ PENDING → ACCEPTED
 
 durumu oluşur.
 
-Sistem kapasite kurallarını dikkate almalıdır.
+Kabul işlemi etkinliğin kapasite kurallarına tabidir.
+
+Yönetici kapasite dahilindeki öğrencileri kabul edebilir.
 
 ### 6.2. Ret
 
@@ -132,6 +167,20 @@ durumu oluşur.
 Ret nedeni konusu henüz kesinleştirilmemiştir.
 
 > **Açık karar:** Normal bir ret işleminde yöneticinin ret nedeni girmesinin zorunlu olup olmayacağı daha sonra belirlenecektir.
+
+### 6.3. Yedek Listeye Alma
+
+Yönetici kapasite dolduktan sonra bazı `PENDING` başvuruları yedek listeye alabilir:
+
+```text
+PENDING → WAITLISTED
+```
+
+Yönetici yedek listeye aldığı öğrencileri başvuru zamanına göre sıralar.
+
+Yedek listeye alınan öğrenciler etkinlik için uygun görülmüş ancak mevcut kontenjan içerisinde doğrudan kabul edilmemiş öğrencilerdir.
+
+Yedek liste yöneticinin manuel olarak belirlediği bir listedir. Yönetici öğrencileri yedek listeye alırken başvuru zaman sırası esas alınır.
 
 ---
 
@@ -153,15 +202,37 @@ Ret nedeni öğrenci tarafından görüntülenebilir.
 
 ```text
 Öğrenci: Ahmet
+
 Durum: ACCEPTED
 
 Yönetici:
+
 "Etkinlik kontenjanı değişti."
 
 Sonuç:
+
 ACCEPTED → REJECTED
+
 Ret nedeni: "Etkinlik kontenjanı değişti."
 ```
+
+### ACCEPTED → REJECTED Sonrası Kapasite
+
+`ACCEPTED → REJECTED` geçişi kapasiteyi boşaltır.
+
+Boşalan kapasite varsa yedek listedeki ilk öğrenci sistem tarafından otomatik olarak kabul edilir.
+
+```text
+ACCEPTED → REJECTED
+        ↓
+Kapasite açıldı
+        ↓
+WAITLISTED sıradaki aday
+        ↓
+ACCEPTED
+```
+
+Yedek listedeki öğrencilerin sırası başvuru zamanına göre korunur.
 
 ---
 
@@ -179,15 +250,39 @@ ACCEPTED → PENDING ❌
 
 Reddedilmiş bir başvuru için öğrenci yeniden başvuru yapamaz.
 
-Ancak kulüp yöneticisi önceki ret kararını düzeltebilir.
+Ancak kulüp yöneticisi önceki ret kararını düzeltebilir:
 
 ```text
 REJECTED → ACCEPTED
 ```
 
-Bu işlem yeni bir başvuru oluşturmaz.
+Bu işlem yeni bir başvuru oluşturmaz. Mevcut başvurunun durumu doğrudan `ACCEPTED` yapılır.
 
-Mevcut başvurunun durumu doğrudan `ACCEPTED` yapılır.
+### Kapasite Kontrolü
+
+`REJECTED → ACCEPTED` işlemi kapasite kurallarına tabidir.
+
+Etkinlik kapasitesi doluysa bu işleme izin verilmez.
+
+```text
+Kapasite: 50
+
+ACCEPTED: 50
+
+REJECTED → ACCEPTED ❌
+```
+
+Yönetici önce etkinlik kapasitesini artırmalıdır veya mevcut kapasitede yer açılmış olmalıdır.
+
+```text
+Kapasite: 50 → 51
+
+        ↓
+
+REJECTED → ACCEPTED ✅
+```
+
+Kapasite aşımına izin verilmez.
 
 ### REJECTED → PENDING Yasaktır
 
@@ -201,12 +296,13 @@ Yönetici öğrenciyi tekrar değerlendirmek istiyorsa `PENDING` durumuna geri d
 
 # 9. WAITLISTED Başvurular
 
-Bekleme listesi yalnızca etkinliğin kapasitesi dolduğunda kullanılır.
+Yedek liste bir **yedek katılımcı listesidir**.
 
-Bekleme listesindeki öğrenciler:
+Yedek listedeki öğrenciler:
 
+* Yönetici tarafından belirlenir.
 * Başvuru zamanına göre sıralanır.
-* Yönetici tarafından tek tek seçilmez.
+* Yönetici tarafından manuel olarak yeniden sıralanamaz.
 * Kapasite açıldığında sistem tarafından otomatik olarak işlenir.
 
 Öncelik:
@@ -217,25 +313,25 @@ Daha erken başvuru
 Daha yüksek öncelik
 ```
 
+Yönetici yedek listeyi oluştururken öğrencilerin başvuru zamanını esas alır.
+
+Yedek listeye alınmış bir öğrencinin etkinliğe uygun görülmesi, öğrencinin doğrudan kabul edildiği anlamına gelmez. Öğrenci ancak kapasite açıldığında kabul edilir.
+
 ---
 
 # 10. Kapasite Açıldığında Otomatik İşlem
 
-Kapasitede yer açıldığında sistem bekleme listesini başvuru zamanına göre işler.
+Kapasitede yer açıldığında sistem yedek listesini başvuru zamanına göre işler.
 
-### PUBLIC etkinlik
+Yedek listedeki ilk öğrenci:
 
 ```text
 WAITLISTED → ACCEPTED
 ```
 
-### APPROVAL_REQUIRED etkinlik
+durumuna geçirilir.
 
-```text
-WAITLISTED → PENDING
-```
-
-Bu işlemde bekleme listesindeki ilk uygun öğrenci önceliklidir.
+Bu işlemde yönetici tarafından ayrıca öğrenci seçilmesine gerek yoktur.
 
 ### Örnek
 
@@ -249,157 +345,255 @@ Mevcut durum:
 
 ```text
 50 ACCEPTED
-10 WAITLISTED
+20 WAITLISTED
 ```
 
-Kabul edilmiş 5 öğrencinin başvurusu etkinlik başlamadan önce reddedilirse:
+Kabul edilmiş bir öğrenci etkinliğe katılamayacağını bildirir ve başvurusunu geri çeker:
 
 ```text
-5 kişilik kapasite açılır
-        ↓
-Bekleme listesindeki ilk 5 kişi alınır
+49 ACCEPTED
+20 WAITLISTED
+```
+
+Sistem yedek listedeki ilk öğrenciyi kabul eder:
+
+```text
+1. WAITLISTED → ACCEPTED
 ```
 
 Sonuç:
 
-`PUBLIC` etkinlikte:
-
 ```text
-5 WAITLISTED → ACCEPTED
+50 ACCEPTED
+19 WAITLISTED
 ```
 
-`APPROVAL_REQUIRED` etkinlikte:
-
-```text
-5 WAITLISTED → PENDING
-```
+Aynı kural yönetici tarafından kabul edilmiş bir başvurunun reddedilmesi sonucunda açılan kapasite için de geçerlidir.
 
 ---
 
-# 11. Kapasitenin Artırılması
+# 11. Yedek Listenin Oluşturulması
 
-Etkinliğin kapasitesi artırıldığında da aynı otomatik bekleme listesi kuralı uygulanır.
+`APPROVAL_REQUIRED` ve kapasite sınırı bulunan etkinliklerde öğrencilerin tamamı başvuru süresi boyunca `PENDING` durumunda bulunabilir.
+
+Örneğin:
+
+```text
+Kapasite: 50
+
+Başvuru sayısı: 100
+
+PENDING: 100
+```
+
+Başvuru süresi sona erdikten sonra yönetici başvuruları değerlendirir.
+
+Örneğin yönetici:
+
+```text
+50 → ACCEPTED
+
+20 → WAITLISTED
+
+30 → REJECTED
+```
+
+şeklinde sonuçlandırabilir.
+
+Bu durumda:
+
+```text
+ACCEPTED: 50
+WAITLISTED: 20
+REJECTED: 30
+PENDING: 0
+```
+
+olur.
+
+Yönetici yedek listeye aldığı 20 öğrenciyi başvuru zamanına göre sıralar.
+
+Örneğin:
+
+```text
+09:01 → Ahmet
+09:05 → Mehmet
+09:12 → Ayşe
+...
+```
+
+şeklinde bir sıra oluşur.
+
+Daha sonra bir kişilik kapasite açıldığında:
+
+```text
+Ahmet → ACCEPTED
+```
+
+olur.
+
+Yedek liste:
+
+```text
+19 kişi
+```
+
+olarak devam eder.
+
+### Başvuruların Tamamlanması
+
+Yönetici kabul ve yedek liste kararlarını verdikten sonra, artık kontenjan kalmadığı ve yeterli yedek aday belirlendiği durumda kalan `PENDING` başvurular `REJECTED` durumuna geçirilebilir.
+
+Bu işlem sistem tarafından otomatik olarak da gerçekleştirilebilir.
+
+Örneğin:
+
+```text
+Kapasite: 50
+
+100 PENDING
+```
+
+Yönetici:
+
+```text
+50 ACCEPTED
+20 WAITLISTED
+15 REJECTED
+```
+
+belirledikten sonra kalan:
+
+```text
+15 PENDING
+```
+
+başvuru sistem tarafından:
+
+```text
+15 PENDING → REJECTED
+```
+
+olarak sonuçlandırılabilir.
+
+Böylece etkinliğin başvuru değerlendirme sürecinde `PENDING` durumda başvuru kalmaz.
+
+---
+
+# 12. Kapasitenin Artırılması
+
+Etkinliğin kapasitesi artırıldığında mevcut yedek liste sistem tarafından başvuru zamanına göre işlenir.
 
 Örneğin:
 
 ```text
 Kapasite: 50 → 70
 
-20 kişilik yeni kapasite oluşur.
+20 kişilik yeni kapasite oluştu.
 ```
 
-Bekleme listesindeki ilk 20 uygun başvuru otomatik olarak işlenir.
-
-`PUBLIC`:
+Yedek listede öğrenciler varsa ilk sıradaki öğrenciler otomatik olarak kabul edilir.
 
 ```text
 WAITLISTED → ACCEPTED
 ```
 
-`APPROVAL_REQUIRED`:
+Örneğin:
 
 ```text
-WAITLISTED → PENDING
+WAITLISTED: 20
+
+Kapasite +20
+
+        ↓
+
+20 WAITLISTED → ACCEPTED
 ```
+
+Sonuç:
+
+```text
+ACCEPTED: 70
+WAITLISTED: 0
+```
+
+`APPROVAL_REQUIRED` etkinlikte ise kapasite artışı, başvuruların henüz yönetici tarafından değerlendirilmediği bir aşamadaysa yöneticinin daha fazla `PENDING` başvuruyu kabul etmesine olanak sağlar.
+
+Başvurular sonuçlandırılıp yedek liste oluşturulduktan sonra kapasite artışı olması durumunda ise yedek listedeki öğrenciler sırayla `ACCEPTED` durumuna geçirilir.
 
 ---
 
-# 12. Başvuru Tarihi Sıralaması
+# 13. Başvuru Tarihi Sıralaması
 
-Bekleme listesindeki öncelik başvurunun oluşturulma zamanına göre belirlenir.
+Yedek listedeki öncelik başvurunun oluşturulma zamanına göre belirlenir.
 
 Örneğin:
 
 ```text
-09:01  → Ahmet
-09:05  → Mehmet
-09:12  → Ayşe
-09:20  → Zeynep
+09:01 → Ahmet
+
+09:05 → Mehmet
+
+09:12 → Ayşe
+
+09:20 → Zeynep
 ```
 
 Kapasite 2 kişi açarsa:
 
 ```text
 Ahmet
+
 Mehmet
 ```
 
-öncelikli olarak işlenir.
+öncelikli olarak kabul edilir.
 
 Yönetici bu sırayı manuel olarak değiştiremez.
 
----
-
-# 13. Başvuru Sonrası Ban Durumu
-
-Bir öğrenci kulüp tarafından etkinlik tarihi için geçerli olacak şekilde banlanmışsa sistem başvuru durumunu otomatik olarak değerlendirir.
-
-Banın geçerlilik tarihi esas alınır.
-
-### Öğrenci başvurduğunda ban etkinlik tarihinde geçerliyse
-
-Başvuru:
-
-```text
-→ REJECTED
-```
-
-olur.
-
-Ret nedeni:
-
-```text
-BAN
-```
-
-olarak kaydedilir.
-
-### Öğrenci daha önce ACCEPTED durumundaysa
-
-Ban etkinlik tarihinde geçerli hale gelirse:
-
-```text
-ACCEPTED → REJECTED
-```
-
-otomatik olarak gerçekleşir.
-
-Ret nedeni:
-
-```text
-BAN
-```
-
-olur.
-
-Bu işlem yöneticinin manuel karar vermesini gerektirmez.
+Bu zaman sıralaması, öğrencilerin yedek listeye alınması sırasında da esas alınır.
 
 ---
 
-# 14. Başvuru Sonrası Banın Etkinlik Tarihine Göre Değerlendirilmesi
+# 14. Başvuru Geri Çekme (WITHDRAWN)
 
-Ban kontrolünde başvurunun yapıldığı tarih değil, **etkinliğin gerçekleşeceği tarih** esas alınır.
+Öğrenci başvurusunu etkinlik başlamadan önce geri çekebilir.
 
-Örneğin:
-
-```text
-Başvuru tarihi: 1 Mayıs
-Etkinlik tarihi: 20 Mayıs
-
-Ban:
-10 Mayıs → 15 Mayıs
-```
-
-Ban etkinlik tarihinde aktif olmadığı için başvuru bu ban nedeniyle reddedilmez.
-
-Ancak:
+Geçerli geri çekme geçişleri:
 
 ```text
-Ban:
-10 Mayıs → 25 Mayıs
+PENDING    → WITHDRAWN
+
+WAITLISTED → WITHDRAWN
+
+ACCEPTED   → WITHDRAWN
 ```
 
-ise ban etkinlik tarihinde aktif olduğundan sistem ilgili başvuruyu reddeder.
+`REJECTED` durumundaki başvurunun geri çekilmesine gerek yoktur.
+
+Etkinlik başladıktan sonra başvuru geri çekilemez.
+
+### ACCEPTED → WITHDRAWN Sonrası Kapasite
+
+```text
+ACCEPTED → WITHDRAWN
+        ↓
+Kapasite açıldı
+        ↓
+WAITLISTED sıradaki aday
+        ↓
+ACCEPTED
+```
+
+Yedek liste başvuru zamanına göre normal kurallara göre işlenir.
+
+### Geri Çekilen Öğrencinin Tekrar Başvurması
+
+`WITHDRAWN` durumuna geçen öğrenci, başvuru süreci hâlâ açıksa aynı etkinliğe tekrar başvurabilir.
+
+Bu yeni başvuru, eski başvurunun devamı değildir; yeni bir application kaydı olarak değerlendirilir.
+
+Eski `WITHDRAWN` başvuru kaydı silinmez; başvuru geçmişi korunur.
 
 ---
 
@@ -409,22 +603,29 @@ Başvuru süresi sona erdiğinde yeni öğrenci başvuruları alınmaz.
 
 Ancak bu durum mevcut başvuruların yönetilmesini engellemez.
 
-Yönetici:
+`APPROVAL_REQUIRED` etkinliklerde yönetici:
 
 * `PENDING` başvuruları kabul edebilir.
 * `PENDING` başvuruları reddedebilir.
+* Uygun gördüğü öğrencileri yedek listeye alabilir.
 * Kapasiteyi artırabilir.
-* Açılan kapasite sonucunda bekleme listesinin otomatik olarak işlenmesini sağlayabilir.
+* Açılan kapasite sonucunda mevcut yedek listenin otomatik olarak işlenmesini sağlayabilir.
 
-Yani:
+Örneğin:
 
 ```text
 Başvuru süresi bitti
+
         ↓
+
 Yeni başvuru ❌
+
         ↓
+
 Mevcut başvuruları yönetme ✅
 ```
+
+Başvurular yönetici tarafından sonuçlandırıldığında artık `PENDING` durumda başvuru bırakılmaması hedeflenir.
 
 ---
 
@@ -434,6 +635,11 @@ Etkinlik başladıktan sonra başvuru kararlarında aşağıdaki işlemler yapı
 
 ```text
 ACCEPTED → REJECTED ❌
+
+PENDING  → ACCEPTED ❌
+
+PENDING  → REJECTED ❌
+
 ```
 
 Başvuru yönetimi etkinliğin başlamasından sonra sonlandırılır.
@@ -450,9 +656,11 @@ Başvurunun `ACCEPTED` olması öğrencinin etkinliğe katıldığı anlamına g
 
 ```text
 Application:
+
 ACCEPTED
 
 Attendance:
+
 katılmadı
 ```
 
@@ -460,9 +668,11 @@ veya:
 
 ```text
 Application:
+
 ACCEPTED
 
 Attendance:
+
 katıldı
 ```
 
@@ -520,47 +730,65 @@ Bu işlem QR ile otomatik oluşturulan katılım kaydının hatalı olması veya
 ```text
 PENDING → ACCEPTED
 PENDING → REJECTED
+PENDING → WAITLISTED   (APPROVAL_REQUIRED, yönetici tarafından)
+PENDING → WITHDRAWN    (öğrenci tarafından)
 
-REJECTED → ACCEPTED
+REJECTED → ACCEPTED     (yönetici tarafından, kapasite uygunsa)
 
-WAITLISTED → ACCEPTED
-WAITLISTED → PENDING
+WAITLISTED → ACCEPTED   (kapasite açıldığında, sistem tarafından)
 
-ACCEPTED → REJECTED
+WAITLISTED → WITHDRAWN  (öğrenci tarafından)
+
+ACCEPTED → REJECTED     (yönetici tarafından, etkinlik başlamadan önce)
+
+ACCEPTED → WITHDRAWN    (öğrenci tarafından, etkinlik başlamadan önce)
 ```
 
-Ayrıca ban nedeniyle sistem tarafından:
+`PUBLIC` etkinliklerde sistem tarafından gerçekleştirilen otomatik başvuru sonucu:
 
 ```text
-ACCEPTED → REJECTED
+PENDING → ACCEPTED
 ```
 
-geçişi otomatik olarak yapılabilir.
+ve kapasite dolduğunda:
 
----
+```text
+PENDING → WAITLISTED
+```
+
+olabilir.
 
 ## Geçersiz geçişler
 
 ```text
-ACCEPTED → PENDING ❌
-REJECTED → PENDING ❌
+ACCEPTED  → PENDING       ❌
+
+REJECTED  → PENDING       ❌
+
+REJECTED  → WAITLISTED    ❌
+
+REJECTED  → yeni başvuru  ❌
 ```
 
-Öğrenci tarafından:
-
-```text
-REJECTED → yeni başvuru ❌
-```
-
-yapılamaz.
+`WITHDRAWN` sonrası öğrenci yeni bir başvuru oluşturabilir (eski kayıt silinmez). Bkz. Bölüm 14.
 
 ---
 
-# 20. Öğrencinin Aynı Etkinliğe Tekrar Başvurması
+# 20. Öğrencinin Aynı Etkinliğe Başvurması
 
-Bir öğrenci aynı etkinlik için yalnızca bir başvuru kaydına sahip olabilir.
+Bir öğrenci aynı etkinlik için aynı anda yalnızca bir aktif başvuru kaydına sahip olabilir.
 
-Başvuru `REJECTED` olsa bile aynı etkinliğe yeni başvuru oluşturamaz.
+Aktif başvuru durumları:
+
+```text
+PENDING
+
+ACCEPTED
+
+WAITLISTED
+```
+
+`REJECTED` durumundaki bir başvurudan sonra öğrenci yeni başvuru oluşturamaz.
 
 Yönetici kararını değiştirmek isterse:
 
@@ -572,81 +800,108 @@ geçişini kullanır.
 
 Yeni bir başvuru oluşturulmaz.
 
----
+`WITHDRAWN` durumundaki başvurudan sonra öğrenci, başvuru süresi açıksa yeni başvuru oluşturabilir.
 
-# 21. Başvuru Geri Çekme
+Bu yeni başvuru eski kaydın devamı değildir; ayrı bir application kaydıdır.
 
-MVP kapsamında öğrencinin yaptığı başvuruyu geri çekmesi desteklenmez.
-
-Dolayısıyla:
-
-```text
-PENDING → CANCELLED ❌
-WAITLISTED → CANCELLED ❌
-ACCEPTED → CANCELLED ❌
-```
-
-gibi öğrenci tarafından yapılan bir başvuru iptali bulunmaz.
-
-Bu özellik ileride ayrıca değerlendirilebilir.
+Eski kayıt silinmez.
 
 ---
 
-# 22. Yetki Özeti
+# 21. Yetki Özeti
 
-| İşlem                            | Başkan | Başkan Yardımcısı | Yönetici |
-| -------------------------------- | -----: | ----------------: | -------: |
-| Başvuruları görüntüleme          |      ✅ |                 ✅ |        ✅ |
-| PENDING → ACCEPTED               |      ✅ |                 ✅ |        ✅ |
-| PENDING → REJECTED               |      ✅ |                 ✅ |        ✅ |
-| ACCEPTED → REJECTED              |      ✅ |                 ✅ |        ✅ |
-| REJECTED → ACCEPTED              |      ✅ |                 ✅ |        ✅ |
-| Bekleme listesini manuel yönetme |      ❌ |                 ❌ |        ❌ |
-| Katılım kaydı ekleme             |      ✅ |                 ✅ |        ✅ |
-| Katılım kaydı silme/düzeltme     |      ✅ |                 ✅ |        ✅ |
+| İşlem                                  | Başkan | Başkan Yardımcısı | Yönetici |
+| -------------------------------------- | -----: | ----------------: | -------: |
+| Başvuruları görüntüleme                |      ✅ |                 ✅ |        ✅ |
+| PENDING → ACCEPTED                     |      ✅ |                 ✅ |        ✅ |
+| PENDING → REJECTED                     |      ✅ |                 ✅ |        ✅ |
+| PENDING → WAITLISTED                   |      ✅ |                 ✅ |        ✅ |
+| ACCEPTED → REJECTED                    |      ✅ |                 ✅ |        ✅ |
+| REJECTED → ACCEPTED (kapasite uygunsa) |      ✅ |                 ✅ |        ✅ |
+| Bekleme listesini oluşturma            |      ✅ |                 ✅ |        ✅ |
+| Bekleme listesini manuel sıralama      |      ❌ |                 ❌ |        ❌ |
+| Katılım kaydı ekleme                   |      ✅ |                 ✅ |        ✅ |
+| Katılım kaydı silme/düzeltme           |      ✅ |                 ✅ |        ✅ |
 
-Bekleme listesi sistem tarafından otomatik yönetildiği için yöneticilerin manuel olarak öğrenci seçmesine gerek yoktur.
+Yedek listedeki öğrencilerin sırası başvuru zamanına göre belirlendiği için yöneticilerin bu sırayı manuel olarak değiştirmesine izin verilmez.
+
+Başvuru geri çekme (`WITHDRAWN`) öğrenci tarafından gerçekleştirilir, yönetici tarafından değil.
 
 ---
 
-# 23. Sistem Tarafından Otomatik Gerçekleştirilen İşlemler
+# 22. Sistem Tarafından Otomatik Gerçekleştirilen İşlemler
 
 Sistem aşağıdaki işlemleri otomatik olarak gerçekleştirir:
+
+### PUBLIC başvurularının sonuçlandırılması
+
+```text
+Başvuru
+
+   ↓
+
+Başvuru koşulları kontrol edilir
+
+   ↓
+
+Kapasite uygunsa
+PENDING → ACCEPTED
+
+Kapasite doluysa
+PENDING → WAITLISTED
+```
 
 ### Kapasite açılması
 
 ```text
 Kapasite açıldı
+
       ↓
-WAITLISTED öğrenciler sıralanır
+
+WAITLISTED öğrenciler başvuru zamanına göre sıralanır
+
       ↓
-PUBLIC → ACCEPTED
-APPROVAL_REQUIRED → PENDING
+
+İlk öğrenci
+
+      ↓
+
+ACCEPTED
 ```
 
-### Ban kontrolü
+### Başvuru değerlendirmesinin tamamlanması
+
+`APPROVAL_REQUIRED` etkinliklerde yönetici başvuruları değerlendirir.
 
 ```text
-Ban etkinlik tarihinde geçerli
-      ↓
-Başvuru etkilenir
-      ↓
-REJECTED + BAN
+PENDING
+
+   ├──→ ACCEPTED
+   │
+   ├──→ REJECTED
+   │
+   └──→ WAITLISTED
 ```
+
+Yeterli sayıda kabul ve yedek liste belirlendikten sonra sonuçlandırılmamış kalan başvurular sistem tarafından `REJECTED` durumuna geçirilebilir.
 
 ### Etkinlik başlangıcı
 
 ```text
 Etkinlik başladı
+
       ↓
+
 Başvuru kararları artık değiştirilemez
+
       ↓
+
 Attendance süreci devam eder
 ```
 
 ---
 
-# 24. Use Case Akışı
+# 23. Use Case Akışı
 
 Temel akış:
 
@@ -659,41 +914,88 @@ Başvuruları görüntüler
       ↓
 Başvuru durumunu inceler
       ↓
-┌─────────────────────────────┐
-│                             │
-PENDING                   ACCEPTED
-│                             │
-├─ Kabul → ACCEPTED            └─ Ret → REJECTED
-│
-└─ Ret → REJECTED
-
-REJECTED
-   │
-   └─ Yönetici düzeltmesi
-          ↓
-      ACCEPTED
+┌──────────────────────────────────────┐
+│                                      │
+PENDING                            ACCEPTED
+│                                      │
+├─ Kabul → ACCEPTED                    └─ Ret → REJECTED
+│                                             ↓
+├─ Ret → REJECTED                    (Kapasite açılır)
+│                                             ↓
+└─ Yedek → WAITLISTED                WAITLISTED işlenir
+                                              ↓
+                                         ACCEPTED
 
 WAITLISTED
    │
    └─ Kapasite açılması
           ↓
-   PUBLIC → ACCEPTED
-   APPROVAL_REQUIRED → PENDING
+      ACCEPTED
+```
+
+`PUBLIC` etkinliklerde başvurular sistem tarafından otomatik olarak sonuçlandırılır:
+
+```text
+Başvuru
+   ↓
+PENDING
+   │
+   ├── Kapasite uygunsa → ACCEPTED
+   │
+   └── Kapasite doluysa → WAITLISTED
+```
+
+`APPROVAL_REQUIRED` etkinliklerde:
+
+```text
+Başvuru
+   ↓
+PENDING
+   ↓
+Yönetici değerlendirir
+   │
+   ├──→ ACCEPTED
+   │
+   ├──→ REJECTED
+   │
+   └──→ WAITLISTED
+```
+
+Yedek listeden kapasite açıldığında:
+
+```text
+WAITLISTED
+   ↓
+Başvuru zamanına göre sıradaki öğrenci
+   ↓
+ACCEPTED
 ```
 
 ---
 
-# 25. Karar Verilmemiş Konular
+# 24. Karar Verilmemiş Konular
 
 Aşağıdaki konular bu use case kapsamında henüz kesinleştirilmemiştir:
 
 * Normal `PENDING → REJECTED` işleminde ret nedeninin zorunlu olup olmayacağı.
 * Ret nedenlerinin serbest metin mi yoksa önceden belirlenmiş seçenekler mi olacağı.
+* Ret nedeni yapısının veri modelinde nasıl tutulacağı (serbest metin, kategori vb.).
 * Başvuru listesinde hangi öğrenci bilgilerinin yöneticilere gösterileceği.
 * Başvuru geçmişinin ne kadar ayrıntılı tutulacağı.
+* Öğrencinin `ACCEPTED → WITHDRAWN` işlemini etkinlik başlamadan ne kadar süre öncesine kadar gerçekleştirebileceği.
 * Attendance düzeltmelerinin audit/history kayıtlarının kullanıcıya gösterilip gösterilmeyeceği.
 
 Bu kararlar sonraki aşamada netleştirilecektir.
+
+---
+
+# 25. Gelecekte Planlanmış Özellikler
+
+Ban/engelleme sistemi bu aşamada MVP kapsamında değildir.
+
+Gelecekte bir kulüp bir kullanıcıyı engellerse bu durumun başvuru akışına etkisi ayrıca tasarlanacaktır.
+
+Bu konu `requirements.md` Bölüm 10'da "Gelecekte Engelleme Sistemi" başlığı altında tanımlanmıştır.
 
 ---
 

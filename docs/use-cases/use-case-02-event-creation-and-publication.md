@@ -63,9 +63,13 @@ Yönetici gerekli bilgileri doldurup etkinliği oluşturduğunda etkinlik doğru
 
 ```text
 Etkinlik bilgileri girilir
+
         ↓
+
 Etkinlik oluşturulur
+
         ↓
+
 Etkinlik yayınlanır
 ```
 
@@ -101,6 +105,7 @@ Etkinlik iki türden biri olabilir:
 
 ```text
 PHYSICAL
+
 ONLINE
 ```
 
@@ -138,6 +143,7 @@ Etkinlik yayınlandıktan sonra etkinlik türü değiştirilemez.
 
 ```text
 PHYSICAL → ONLINE    ❌
+
 ONLINE → PHYSICAL    ❌
 ```
 
@@ -161,28 +167,74 @@ Etkinlik oluşturulurken başvuru tipi belirlenir.
 
 ```text
 PUBLIC
-APPROVAL_REQUIRED
+
+PRIVATE
 ```
 
 ## 8.1. Herkese Açık
 
 `PUBLIC` etkinliklerde öğrencinin başvurusu yönetici onayı gerektirmez.
 
-Kontenjan uygunsa başvuru otomatik olarak kabul edilir.
+Kapasite belirtilmemişse veya kapasite henüz dolmamışsa başvuru otomatik olarak kabul edilir.
 
 ```text
-Başvuru → ACCEPTED
+Başvuru
+   ↓
+PENDING
+   ↓
+ACCEPTED
 ```
 
-## 8.2. Onay Gerektiren
-
-`APPROVAL_REQUIRED` etkinliklerde öğrencinin başvurusu yönetici tarafından değerlendirilir.
+Kapasite dolduktan sonra yeni başvurular bekleme listesine alınır:
 
 ```text
-Başvuru → PENDING
+Başvuru
+   ↓
+PENDING
+   ↓
+WAITLISTED
 ```
 
-Daha sonra yönetici başvuruyu kabul veya reddeder.
+Bekleme listesindeki öğrenciler başvuru zamanına göre sıralanır.
+
+Kapasite açıldığında bekleme listesindeki ilk öğrenci otomatik olarak `ACCEPTED` durumuna geçirilir.
+
+## 8.2. Özel Etkinlik
+
+`PRIVATE` etkinliklerde öğrencinin başvurusu yönetici tarafından değerlendirilir.
+
+Kapasite bulunup bulunmamasından bağımsız olarak, başvuru süresi devam ederken başvuru:
+
+```text
+Başvuru
+   ↓
+PENDING
+```
+
+durumuna geçer.
+
+Kapasite bulunmayan PRIVATE etkinliklerde yönetici başvuruları:
+
+```text
+PENDING
+   ├──→ ACCEPTED
+   └──→ REJECTED
+```
+
+şeklinde sonuçlandırır.
+
+Kapasitesi bulunan PRIVATE etkinliklerde ise yönetici değerlendirme sonucunda başvuruları:
+
+```text
+PENDING
+   ├──→ ACCEPTED
+   ├──→ WAITLISTED
+   └──→ REJECTED
+```
+
+şeklinde sonuçlandırabilir.
+
+`WAITLISTED`, yöneticinin uygun gördüğü yedek adayları ifade eder.
 
 ---
 
@@ -191,8 +243,9 @@ Daha sonra yönetici başvuruyu kabul veya reddeder.
 Etkinlik yayınlandıktan sonra başvuru tipi değiştirilemez.
 
 ```text
-PUBLIC → APPROVAL_REQUIRED    ❌
-APPROVAL_REQUIRED → PUBLIC    ❌
+PUBLIC → PRIVATE    ❌
+
+PRIVATE → PUBLIC    ❌
 ```
 
 Bu nedenle etkinlik oluşturulurken başvuru tipi dikkatli belirlenmelidir.
@@ -205,31 +258,73 @@ Etkinlik oluşturulurken kapasite belirtilmesi isteğe bağlıdır.
 
 Kapasite belirtilmezse etkinliğin kapasite sınırı bulunmaz.
 
-Kapasite belirtilmişse öğrencilerin başvuruları kapasiteye göre değerlendirilir.
+Kapasite belirtilmişse başvurular etkinliğin başvuru tipine göre kapasiteyle birlikte değerlendirilir.
 
-Kapasite dolduğunda yeni uygun başvurular bekleme listesine alınabilir.
+### PUBLIC etkinliklerde
 
-Bu durum Use Case 01 ve Use Case 03 kapsamında ayrıntılandırılmıştır.
+Kapasite dolana kadar uygun başvurular otomatik olarak kabul edilir.
+
+Kapasite dolduktan sonra yeni başvurular `WAITLISTED` durumuna geçer.
+
+### PRIVATE etkinliklerde
+
+Kapasitenin dolmuş olması başvuru süresi devam ederken yeni başvuruları engellemez.
+
+Başvurular `PENDING` durumunda kalır.
+
+Başvuru süresi sona erdikten sonra yönetici kapasiteyi dikkate alarak:
+
+* `ACCEPTED`
+* `WAITLISTED`
+* `REJECTED`
+
+durumlarını belirler.
+
+Kapasitesi bulunmayan PRIVATE etkinliklerde `WAITLISTED` kullanılmaz.
+
+Bu kurallar Use Case 01 ve Use Case 03 kapsamında ayrıntılandırılmıştır.
 
 ---
 
 # 11. Kapasitenin Değiştirilmesi
 
-Etkinlik henüz başlamamışsa kapasite artırılabilir.
+Kapasite değişikliği başvuru başlangıç tarihine göre farklı kurallara tabidir.
+
+## 11.1. Başvuru Başlangıç Tarihinden Önce
+
+Başvuru süreci henüz başlamamışsa kapasite hem artırılabilir hem azaltılabilir.
+
+```text
+50 → 40    ✅
+
+50 → 70    ✅
+```
+
+## 11.2. Başvuru Süreci Başladıktan Sonra
+
+Başvuru başlangıç tarihi geçtikten sonra kapasite yalnızca artırılabilir.
+
+```text
+50 → 70    ✅
+
+50 → 40    ❌
+```
+
+Bu kural doğrudan **başvuru başlangıç tarihine** bağlıdır. Etkinliğe herhangi bir başvuru yapılmış olup olmaması bu kuralı değiştirmez.
+
+Kapasite artırıldığında mevcut bekleme listesi de ilgili kurallara göre işlenir.
 
 Örneğin:
 
 ```text
-50 → 70    ✅
+Kapasite: 50
+ACCEPTED: 50
+WAITLISTED: 10
+
+Kapasite → 55
 ```
 
-Ancak kapasite azaltılamaz:
-
-```text
-50 → 40    ❌
-```
-
-Bu kural, daha önce alınmış başvuruların ve oluşturulmuş bekleme listesinin geçersiz hale gelmesini önlemek amacıyla uygulanır.
+olduğunda açılan 5 kontenjan, bekleme listesindeki ilk 5 adayın kabul edilmesi için kullanılır.
 
 ---
 
@@ -243,6 +338,7 @@ Başvuru başlangıç tarihi henüz gelmemişse yönetici bu tarihi değiştireb
 
 ```text
 Başvuru başlangıcı: 01 Ekim
+
 Bugün: 25 Eylül
 ```
 
@@ -252,6 +348,7 @@ Başvuru başladıktan sonra başlangıç tarihi değiştirilemez.
 
 ```text
 Başvuru başlamadı → değiştirilebilir
+
 Başvuru başladı    → değiştirilemez
 ```
 
@@ -273,6 +370,8 @@ Bu özellikle başvuru süresinin uzatılabilmesini sağlar.
 
 Başvuru süresi sona erdikten sonra mevcut başvurular yönetilmeye devam edebilir.
 
+Özellikle PRIVATE etkinliklerde başvuru süresinin sona ermesinden sonra `PENDING` başvurular yönetici tarafından sonuçlandırılabilir.
+
 ---
 
 # 14. Etkinlik Tarihleri
@@ -281,7 +380,8 @@ Etkinliğin başlangıç ve bitiş tarihi/saatleri etkinlik başlamadan önce de
 
 ```text
 Başlangıç tarihi/saati → değiştirilebilir
-Bitiş tarihi/saati      → değiştirilebilir
+
+Bitiş tarihi/saati     → değiştirilebilir
 ```
 
 Etkinlik başladıktan sonra bu alanların değiştirilmesi mümkün değildir.
@@ -346,20 +446,20 @@ Ancak etkinliğin türü değiştirilemez.
 
 Etkinlik henüz başlamamışsa:
 
-| Alan                     |         Düzenlenebilir |
-| ------------------------ | ---------------------: |
-| Etkinlik adı             |                      ❌ |
-| Açıklama                 |                      ✅ |
-| Görsel                   |                      ✅ |
-| Etkinlik türü            |                      ❌ |
-| Başlangıç tarihi/saati   |                      ✅ |
-| Bitiş tarihi/saati       |                      ✅ |
-| Fiziksel konum           |                      ✅ |
-| Online bağlantı          |                      ✅ |
-| Başvuru tipi             |                      ❌ |
-| Kapasite                 | ✅ Sadece artırılabilir |
-| Başvuru başlangıç tarihi | ✅ Başvuru başlamadıysa |
-| Başvuru bitiş tarihi     |                      ✅ |
+| Alan                     | Düzenlenebilir                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Etkinlik adı             | ❌                                                                                                         |
+| Açıklama                 | ✅                                                                                                         |
+| Görsel                   | ✅                                                                                                         |
+| Etkinlik türü            | ❌                                                                                                         |
+| Başlangıç tarihi/saati   | ✅                                                                                                         |
+| Bitiş tarihi/saati       | ✅                                                                                                         |
+| Fiziksel konum           | ✅                                                                                                         |
+| Online bağlantı          | ✅                                                                                                         |
+| Başvuru tipi             | ❌                                                                                                         |
+| Kapasite                 | ✅ Başvuru başlamadıysa artırılabilir veya azaltılabilir; başvuru başladıktan sonra yalnızca artırılabilir |
+| Başvuru başlangıç tarihi | ✅ Başvuru başlamadıysa                                                                                    |
+| Başvuru bitiş tarihi     | ✅                                                                                                         |
 
 Etkinlik başladıktan sonra etkinliğin düzenlenmesine ilişkin bu değişiklikler yapılamaz.
 
@@ -459,13 +559,14 @@ için kullanılabilir.
 
 # 23. Yetki Özeti
 
-| İşlem               | Başkan | Başkan Yardımcısı | Yönetici | Normal Öğrenci |
-| ------------------- | -----: | ----------------: | -------: | -------------: |
-| Etkinlik oluşturma  |      ✅ |                 ✅ |        ✅ |              ❌ |
-| Etkinliği yayınlama |      ✅ |                 ✅ |        ✅ |              ❌ |
-| Etkinlik düzenleme  |      ✅ |                 ✅ |        ✅ |              ❌ |
-| Kapasite artırma    |      ✅ |                 ✅ |        ✅ |              ❌ |
-| Etkinlik iptali     |      ✅ |                 ✅ |        ✅ |              ❌ |
+| İşlem               |                               Başkan |                    Başkan Yardımcısı |                             Yönetici | Normal Öğrenci |
+| ------------------- | -----------------------------------: | -----------------------------------: | -----------------------------------: | -------------: |
+| Etkinlik oluşturma  |                                    ✅ |                                    ✅ |                                    ✅ |              ❌ |
+| Etkinliği yayınlama |                                    ✅ |                                    ✅ |                                    ✅ |              ❌ |
+| Etkinlik düzenleme  |                                    ✅ |                                    ✅ |                                    ✅ |              ❌ |
+| Kapasite artırma    |                                    ✅ |                                    ✅ |                                    ✅ |              ❌ |
+| Kapasite azaltma    | ✅ (yalnızca başvuru başlamadan önce) | ✅ (yalnızca başvuru başlamadan önce) | ✅ (yalnızca başvuru başlamadan önce) |              ❌ |
+| Etkinlik iptali     |                                    ✅ |                                    ✅ |                                    ✅ |              ❌ |
 
 ---
 
@@ -477,12 +578,19 @@ Temel yaşam döngüsü:
 
 ```text
 CREATED
+
    ↓
+
 PUBLISHED
+
    │
+
    ├────────────→ CANCELLED
+
    │
+
    ↓
+
 COMPLETED
 ```
 
