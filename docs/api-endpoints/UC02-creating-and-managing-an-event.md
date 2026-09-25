@@ -1,414 +1,965 @@
-# UC02 — Etkinliğin Oluşturulması ve Yönetilmesi
+# UC02 — Etkinliğin Oluşturulması ve Yönetilmesi — API Endpointleri
 
 ## 1. Amaç
 
-Kulüp yöneticilerinin kendi kulüplerine ait etkinlikleri oluşturmasını, yayınlamasını, etkinlik bilgilerini düzenlemesini ve etkinliği tamamlanmış veya iptal edilmiş duruma getirmesini kapsar.
+Bu endpointler, kulüp yöneticilerinin kendi kulüplerine ait etkinlikleri oluşturmasını, yayınlamasını, etkinlik bilgilerini yönetmesini, kapasite ve başvuru kurallarını düzenlemesini ve etkinliği iptal etmesini kapsar.
 
-Bu işlemler yalnızca ilgili kulübün yöneticileri tarafından gerçekleştirilebilir.
+Etkinlik oluşturma işlemi ile yayınlama işlemi ayrı değildir.
 
-Kulüp yöneticisi olmak ayrı bir kullanıcı tipi değildir. Kullanıcı, `ClubMember` üzerinden ilgili kulüpte `PRESIDENT`, `VICE_PRESIDENT` veya `MANAGER` rolüne sahipse o kulübün etkinliklerini yönetebilir.
+Başarılı bir oluşturma işlemi sonucunda `Event` doğrudan:
+
+```text
+PUBLISHED
+```
+
+durumunda oluşturulur.
+
+Etkinlik başvurularının yönetilmesi UC-03, öğrencinin etkinliğe başvurması ve katılım süreci UC-01 kapsamında ele alınır.
 
 ---
 
-## 2. Yetki
+# 2. Yetki
 
-Etkinlik yönetimi için kullanıcının:
+Etkinlik yönetimi gerektiren endpointlerde kullanıcının:
 
-* giriş yapmış olması,
-* ilgili kulübün aktif üyesi olması,
-* kulüpte `PRESIDENT`, `VICE_PRESIDENT` veya `MANAGER` rolüne sahip olması
+* sisteme giriş yapmış olması,
+* ilgili kulübün aktif bir yöneticisi olması,
+* `ClubMember` üzerinden ilgili kulüpte aşağıdaki rollerden birine sahip olması
 
-gerekir.
+gerekir:
 
-Kullanıcı başka kulüplerin etkinliklerini yönetemez.
+```text
+PRESIDENT
+VICE_PRESIDENT
+MANAGER
+```
 
-Sistem yöneticisi (`ADMIN`) ise sistem genelindeki yönetim yetkileri kapsamında gerekli yönetim işlemlerini gerçekleştirebilir.
+Kullanıcı yalnızca yöneticisi olduğu kulübün etkinliklerini yönetebilir.
+
+Normal öğrenci veya yalnızca kulübü takip eden kullanıcı etkinlik yönetimi endpointlerini kullanamaz.
+
+Global `ADMIN` normal kulüp etkinliklerini kulüp yöneticisi yerine yönetmez. Global admin işlemleri bu endpointlerin kapsamında değildir.
 
 ---
 
 # 3. API Endpointleri
 
-## 3.1 Etkinlik Oluşturma ve Yayınlama
+## 3.1. Etkinlik Oluşturma ve Yayınlama
 
 ### `POST /clubs/{clubId}/events`
 
-Belirtilen kulüp adına yeni bir etkinlik oluşturur ve yayınlar.
+Belirtilen kulüp adına yeni bir etkinlik oluşturur ve doğrudan yayınlar.
 
-Etkinlik oluşturma ve yayınlama ayrı işlemler değildir. Başarılı oluşturma sonucunda etkinliğin durumu doğrudan:
+Etkinlik oluşturma ve yayınlama ayrı endpointler değildir.
 
-`PUBLISHED`
+Başarılı işlem sonucunda:
+
+```text
+Event.status = PUBLISHED
+```
 
 olur.
 
 ### Yetki
 
-* İlgili kulübün `PRESIDENT`, `VICE_PRESIDENT` veya `MANAGER` üyesi
-* Yetkili `ADMIN`
+Yalnızca ilgili kulübün aktif:
 
-### Temel bilgiler
+* `PRESIDENT`
+* `VICE_PRESIDENT`
+* `MANAGER`
 
-Etkinlik için gerekli bilgiler arasında:
+rollerinden birine sahip kullanıcıları kullanabilir.
 
-* etkinlik adı
-* açıklama
-* görsel
-* etkinlik türü
-* başlangıç tarihi/saatı
-* bitiş tarihi/saatı
-* fiziksel konum veya online bağlantı
-* başvuru başlangıç tarihi/saatı
-* başvuru bitiş tarihi/saatı
-* başvuru tipi
-* kapasite
+### Oluşturma sırasında belirlenen bilgiler
 
-bulunur.
+Etkinlik oluşturulurken temel olarak:
+
+* `name`
+* `description`
+* `image`
+* `eventType`
+* `startAt`
+* `endAt`
+* `location` veya `onlineLink`
+* `applicationStartAt`
+* `applicationEndAt`
+* `applicationType`
+* `capacity`
+
+belirlenir.
+
+`capacity` isteğe bağlıdır.
+
+### Temel doğrulamalar
+
+Oluşturma sırasında en azından:
+
+```text
+applicationStartAt < applicationEndAt < startAt < endAt
+```
+
+zaman ilişkisi korunmalıdır.
+
+Etkinlik türüne göre ilgili alanların geçerli olması gerekir:
+
+```text
+PHYSICAL → location
+ONLINE   → onlineLink
+```
+
+Başvuru tipi:
+
+```text
+PUBLIC
+APPROVAL_REQUIRED
+```
+
+olmalıdır.
+
+Kapasite belirtilmişse negatif veya geçersiz bir değer kabul edilmez.
 
 ### Sonuç
 
 Başarılı oluşturma sonucunda yeni `Event` kaydı:
 
-`PUBLISHED`
+```text
+PUBLISHED
+```
 
-durumunda olur.
+durumunda oluşturulur.
 
-Etkinliği oluşturan kullanıcı `createdBy` alanında tutulur.
+Etkinliği oluşturan kullanıcı:
+
+```text
+createdBy = currentUser
+```
+
+şeklinde kaydedilir.
+
+Kalıcı `DRAFT` veya `CREATED` event status'u oluşturulmaz.
 
 ---
 
-## 3.2 Etkinlik Detayını Görüntüleme
+# 3.2. Etkinlik Detayını Görüntüleme
 
 ### `GET /events/{eventId}`
 
 Belirli bir etkinliğin detaylarını getirir.
 
-Bu endpoint UC01'deki öğrenci etkinlik görüntüleme işlemiyle ortak kullanılabilir.
+Bu endpoint UC-01 ile ortak kullanılabilir.
 
-Yanıtta etkinlik bilgilerinin yanında, giriş yapmış kullanıcının bu etkinliğe ilişkin kendi başvuru ve katılım durumu da bulunabilir.
+Yanıtta etkinliğin temel bilgilerinin yanında, giriş yapmış kullanıcının kendi başvuru ve katılım özeti de bulunabilir.
 
 Örneğin:
 
-* başvuru yok
-* `PENDING`
-* `ACCEPTED`
-* `WAITLISTED`
-* `REJECTED`
-* `WITHDRAWN`
-* `ATTENDED`
-* `NOT_ATTENDED`
+```text
+applicationStatus:
+null
+PENDING
+ACCEPTED
+WAITLISTED
+REJECTED
+WITHDRAWN
+```
 
-Bu bilgiler için mobil uygulamanın ayrı ayrı `Event`, `Application` ve `Attendance` endpointlerine istek göndermesi gerekmez.
+ve:
+
+```text
+attendanceStatus:
+null
+ATTENDED
+NOT_ATTENDED
+```
+
+şeklinde bilgiler döndürülebilir.
+
+Böylece istemcinin etkinlik ekranını oluşturmak için ayrı ayrı:
+
+```text
+GET /events/{eventId}
+GET /events/{eventId}/application
+GET /...
+```
+
+çağrıları yapması zorunlu değildir.
+
+> Bu endpointin öğrenciye ait başvuru/katılım özetini içerip içermeyeceği response contract aşamasında kesinleştirilecektir. Ancak ayrı endpoint sayısını azaltmak amacıyla tek response içinde sunulması tercih edilen tasarımdır.
 
 ---
 
-## 3.3 Etkinlik Bilgilerini Düzenleme
+# 3.3. Etkinlik Bilgilerini Düzenleme
 
 ### `PATCH /events/{eventId}`
 
-Yayınlanmış bir etkinliğin değiştirilebilen bilgilerini günceller.
+Yayınlanmış bir etkinliğin değiştirilebilen alanlarını günceller.
 
 `PATCH` kullanıldığı için yalnızca değiştirilmek istenen alanların gönderilmesi yeterlidir.
 
 ### Yetki
 
-Yalnızca:
+Yalnızca etkinliğin ait olduğu kulübün aktif:
 
-* ilgili kulübün `PRESIDENT`
+* `PRESIDENT`
 * `VICE_PRESIDENT`
 * `MANAGER`
 
-rollerinden birine sahip kullanıcıları ve yetkili `ADMIN` işlemleri gerçekleştirebilir.
+rollerinden birine sahip kullanıcıları kullanabilir.
 
-### Düzenleme kuralları
+Başka bir kulübün yöneticisi etkinliği değiştiremez.
 
-Etkinlik başlamadan önce bazı etkinlik bilgileri değiştirilebilir.
+### Alan kuralları
 
-Etkinlik başladıktan sonra etkinlik üzerinde yönetimsel değişiklik yapılamaz.
+| Alan                 | Düzenleme kuralı                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `name`               | Yayınlandıktan sonra değiştirilemez                                                           |
+| `description`        | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `image`              | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `eventType`          | Yayınlandıktan sonra değiştirilemez                                                           |
+| `location`           | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `onlineLink`         | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `applicationType`    | Başvuru başlamadan önce değiştirilebilir                                                      |
+| `capacity`           | Başvuru başlamadan önce artırılabilir/azaltılabilir; başladıktan sonra yalnızca artırılabilir |
+| `applicationStartAt` | Başvuru başlamadan önce değiştirilebilir                                                      |
+| `applicationEndAt`   | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `startAt`            | Etkinlik başlamadan önce değiştirilebilir                                                     |
+| `endAt`              | Etkinlik başlamadan önce değiştirilebilir                                                     |
 
-### Alan bazlı kurallar
+### Genel zaman sınırı
 
-| Alan                      | Kural                                                                                         |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `name`                    | Yayınlandıktan sonra değiştirilemez                                                           |
-| `description`             | Etkinlik başlamadan önce değiştirilebilir                                                     |
-| `image`                   | Etkinlik başlamadan önce değiştirilebilir                                                     |
-| `eventType`               | Yayınlandıktan sonra değiştirilemez                                                           |
-| `location` / `onlineLink` | Etkinlik başlamadan önce değiştirilebilir                                                     |
-| `applicationType`         | `applicationStartAt` başlamadan önce değiştirilebilir                                         |
-| `capacity`                | Başvuru başlamadan önce artırılabilir/azaltılabilir; başladıktan sonra yalnızca artırılabilir |
-| `applicationStartAt`      | Başlamadan önce değiştirilebilir; başladıktan sonra değiştirilemez                            |
-| `applicationEndAt`        | Etkinlik başlamadan önce değiştirilebilir                                                     |
-| `startAt`                 | Etkinlik başlamadan önce değiştirilebilir                                                     |
-| `endAt`                   | Etkinlik başlamadan önce değiştirilebilir                                                     |
+Etkinlik başladıktan sonra etkinlik üzerinde yönetimsel düzenleme yapılamaz.
 
-Başarılı bir `PATCH` işlemi sonucunda güncellenmiş `Event` bilgisi döndürülür.
+Dolayısıyla:
 
-Bu nedenle istemcinin güncel etkinliği almak için ayrıca `GET /events/{eventId}` çağırması gerekmez.
+```text
+now >= startAt
+```
+
+durumunda düzenlenebilir alanların tamamı kilitlenir.
+
+### Tarih doğrulamaları
+
+PATCH sonucunda:
+
+```text
+applicationStartAt < applicationEndAt < startAt < endAt
+```
+
+ilişkisi korunmalıdır.
+
+Örneğin yalnızca `endAt` değiştiriliyorsa yeni `endAt` değeri mevcut `startAt` değerinden sonra olmalıdır.
+
+Benzer şekilde `startAt` değiştirilirken mevcut başvuru tarihleriyle olan zaman ilişkileri bozulmamalıdır.
+
+### Kapasite değişikliği
+
+Başvuru başlamadan önce:
+
+```text
+capacity:
+50 → 40   ✅
+50 → 70   ✅
+```
+
+olabilir.
+
+Ancak yeni kapasite mevcut `ACCEPTED` sayısından düşük olamaz.
+
+Örneğin:
+
+```text
+capacity = 50
+ACCEPTED = 45
+```
+
+ise:
+
+```text
+capacity = 40
+```
+
+reddedilir.
+
+Başvuru başladıktan sonra:
+
+```text
+50 → 70   ✅
+50 → 40   ❌
+```
+
+olur.
+
+### Kapasite artırıldığında
+
+Kapasite artırılması sonucunda boş kontenjan oluşursa sistem mevcut `WAITLISTED` başvuruları başvuru zamanına göre otomatik olarak işler.
+
+Örneğin:
+
+```text
+capacity = 50
+ACCEPTED = 50
+WAITLISTED = 10
+```
+
+ve:
+
+```text
+capacity = 53
+```
+
+olursa:
+
+```text
+3 WAITLISTED → ACCEPTED
+```
+
+otomatik olarak gerçekleştirilir.
+
+`PENDING` başvurular kapasite artışı nedeniyle otomatik olarak `ACCEPTED` yapılmaz.
+
+Bu özellikle `APPROVAL_REQUIRED` etkinliklerde önemlidir.
+
+### Sonuç
+
+Başarılı `PATCH` sonucunda güncellenmiş `Event` bilgisi döndürülür.
+
+Bu nedenle istemcinin güncel etkinliği almak için ayrıca:
+
+```text
+GET /events/{eventId}
+```
+
+çağrısı yapması zorunlu değildir.
 
 ---
 
-## 3.4 Etkinliği İptal Etme
+# 3.4. Etkinliği İptal Etme
 
 ### `POST /events/{eventId}/cancel`
 
-Etkinliği iptal eder.
+Yayınlanmış bir etkinliği iptal eder.
 
 Geçerli durum geçişi:
 
-`PUBLISHED → CANCELLED`
+```text
+PUBLISHED → CANCELLED
+```
+
+### Yetki
+
+Yalnızca ilgili kulübün aktif:
+
+* `PRESIDENT`
+* `VICE_PRESIDENT`
+* `MANAGER`
+
+rollerinden biri.
 
 ### İptal koşulları
 
 Etkinlik:
 
-* `PUBLISHED` durumunda olmalı,
-* henüz başlamamış olmalıdır (`now < startAt`).
+```text
+status = PUBLISHED
+```
+
+olmalı ve henüz başlamamış olmalıdır:
+
+```text
+now < startAt
+```
 
 Etkinlik başladıktan sonra iptal edilemez.
 
-### İptal edilen etkinlik
+### İptal sonrası
 
 İptal edilen etkinlik:
 
 * yeni başvuru alamaz,
-* QR ile katılım işlemi gerçekleştirilemez,
-* geçmişte oluşturulmuş `Application` kayıtları silinmez,
-* `Application` için ayrıca `CANCELLED` durumu oluşturulmaz.
+* başvuru yönetimine açık değildir,
+* QR ile katılım süreci başlatamaz,
+* yeniden `PUBLISHED` durumuna getirilemez.
 
-Etkinliğin kendisi `CANCELLED` durumunda tutulur ve geçmişteki etkinlik bilgisi korunur.
+Mevcut `Application` kayıtları silinmez.
 
-İptal edilmeden önce etkinlik başlamadığı için bu senaryoda yeni `Attendance` kaydı oluşturulmaz.
+`Application` için ayrıca:
+
+```text
+CANCELLED
+```
+
+status'u oluşturulmaz.
+
+İptal edilen etkinliğin kendi durumu:
+
+```text
+CANCELLED
+```
+
+olarak tutulur.
+
+Etkinlik başlamadan iptal edildiği için normal akışta yeni `Attendance` kayıtları oluşturulmaz.
+
+### Sonuç
+
+Başarılı işlem sonucunda güncel `Event` bilgisi döndürülebilir.
 
 ---
 
-## 3.5 Etkinliği Tamamlandı Olarak İşaretleme
+# 3.5. Etkinliği Tamamlanmış Duruma Geçirme
 
 ### `POST /events/{eventId}/complete`
 
-Etkinliğin tamamlandığını belirtir.
+Bu endpoint, etkinliğin `COMPLETED` durumuna geçirilmesini sağlar.
 
 Geçerli durum geçişi:
 
-`PUBLISHED → COMPLETED`
+```text
+PUBLISHED → COMPLETED
+```
 
-### Tamamlama koşulu
+### Koşul
 
 Etkinliğin bitiş zamanı gelmiş olmalıdır:
 
-`now >= endAt`
+```text
+now >= endAt
+```
 
 Etkinlik henüz bitmemişse `COMPLETED` durumuna geçirilemez.
 
-Etkinlik tamamlandıktan sonra:
+### Önemli tasarım notu
 
-* yeni başvuru alınamaz,
-* başvuru kabul/reddetme/bekleme listesi kararları değiştirilemez.
+Güncel UC-02'de `COMPLETED` durumuna geçişin tam olarak hangi mekanizma ile yapılacağı henüz kesinleştirilmemiştir.
 
-Katılım kayıtlarının sonuçlandırılması bu yaşam döngüsüyle ilişkilidir.
+Bu nedenle bu endpoint şu aşamada **kesinleşmiş otomatik tamamlanma mekanizması olarak değerlendirilmemelidir**.
+
+Teknik tasarım aşamasında şu seçeneklerden biri belirlenebilir:
+
+```text
+Zaman tabanlı otomatik geçiş
+```
+
+veya:
+
+```text
+Yetkili yönetici tarafından tetiklenen geçiş
+```
+
+veya uygun görülen başka bir sistem mekanizması.
+
+Dolayısıyla endpoint sözleşmesi, bu karar kesinleştiğinde son haline getirilmelidir.
+
+### Tamamlanmış etkinlik
+
+`COMPLETED` durumundaki etkinlik:
+
+* yeni başvuru alamaz,
+* başvuru durumlarını değiştiremez,
+* başvuru geri çekme işlemine izin vermez.
+
+Attendance işlemleri ayrı model ve endpoint kuralları kapsamında yürütülür.
 
 ---
 
-## 3.6 Etkinliği Silme
+# 3.6. Etkinliği Silme
 
 ### `DELETE /events/{eventId}`
 
-Etkinliğin fiziksel olarak veritabanından silinmesini sağlar.
+Etkinliğin fiziksel olarak silinmesini sağlar.
 
-Bu endpoint yalnızca henüz kullanıcı etkileşimi başlamamış etkinliklerde kullanılabilir.
+Bu endpoint yalnızca henüz kullanıcı etkileşiminin başlamadığı sınırlı durumda kullanılabilir.
 
 ### Silme koşulları
 
-Etkinliğin:
+Aşağıdaki koşulların tamamı sağlanmalıdır:
 
-* `PUBLISHED` durumunda olması,
-* `applicationStartAt` zamanının henüz gelmemiş olması,
-* hiçbir `Application` kaydının bulunmaması
+```text
+status = PUBLISHED
+```
 
-gerekir.
+```text
+now < applicationStartAt
+```
 
-Bu üç koşul birlikte sağlanmıyorsa fiziksel silme yapılamaz.
+ve etkinliğe ait hiçbir `Application` bulunmamalıdır.
 
-Özellikle başvuru süreci başlamışsa, hiç başvuru bulunmasa bile etkinlik fiziksel olarak silinmez. Bu durumda etkinlik `CANCELLED` olarak işaretlenebilir.
+Yani:
 
-Herhangi bir `Application` kaydı bulunan etkinlik ise fiziksel olarak silinmez.
+```text
+Başvuru başlamadı
+        +
+Application = 0
+        +
+Event = PUBLISHED
+        ↓
+DELETE
+```
 
-Bu yaklaşım, kullanıcı etkileşimi başlamış etkinliklerin geçmişinin korunmasını sağlar.
+### Silinemeyen durumlar
+
+Başvuru süreci başlamışsa etkinlik fiziksel olarak silinemez.
+
+Bu durumda hiç başvuru yapılmamış olsa dahi:
+
+```text
+PUBLISHED → CANCELLED
+```
+
+kullanılır.
+
+Aynı şekilde herhangi bir `Application` kaydı bulunan etkinlik fiziksel olarak silinemez.
+
+Bu durumda etkinlik iptal edilebilir.
+
+### Silinen etkinlik
+
+Fiziksel silme işlemi `Event` kaydını veritabanından kaldırır.
+
+Bu işlem `CANCELLED` status'u oluşturmaz.
+
+Dolayısıyla:
+
+```text
+PUBLISHED → DELETE
+```
+
+ile:
+
+```text
+PUBLISHED → CANCELLED
+```
+
+farklı işlemlerdir.
+
+Silme işlemi yalnızca başvuru başlamadan ve hiç başvuru yokken kullanılabilir.
 
 ---
 
-# 4. Etkinlik Durumları
+# 4. Event Status'leri
 
-`Event` için MVP kapsamında üç durum bulunur:
+MVP kapsamında `Event` için:
 
-| Durum       | Anlamı                                          |
-| ----------- | ----------------------------------------------- |
-| `PUBLISHED` | Etkinlik yayınlanmış ve normal yaşam döngüsünde |
-| `COMPLETED` | Etkinlik tamamlanmış                            |
-| `CANCELLED` | Etkinlik iptal edilmiş                          |
+```text
+PUBLISHED
+COMPLETED
+CANCELLED
+```
 
-Temel yaşam döngüsü:
+status'leri bulunur.
 
-`PUBLISHED → COMPLETED`
+Temel geçişler:
 
-veya
+```text
+PUBLISHED
+   │
+   ├──→ COMPLETED
+   │
+   └──→ CANCELLED
+```
 
-`PUBLISHED → CANCELLED`
+Etkinlik oluşturulduğunda:
 
-Etkinlik oluşturulduğunda doğrudan `PUBLISHED` olur.
+```text
+PUBLISHED
+```
 
-MVP kapsamında `DRAFT` durumu bulunmaz.
+olarak oluşturulur.
+
+`DRAFT` veya `CREATED` kalıcı Event status'leri bulunmaz.
+
+Fiziksel silme ise status geçişi değildir:
+
+```text
+PUBLISHED → DELETE
+```
+
+şeklinde Event kaydının kaldırılmasıdır.
 
 ---
 
 # 5. Etkinlik Düzenleme Kuralları
 
-## İsim
+Endpoint seviyesinde temel kurallar:
 
-Etkinlik yayınlandıktan sonra değiştirilemez.
+### Değiştirilemez
 
-## Etkinlik türü
+```text
+name
+eventType
+```
 
-Etkinlik `PHYSICAL` veya `ONLINE` olarak oluşturulur.
+`name` ve `eventType` yayınlandıktan sonra değiştirilemez.
 
-Yayınlandıktan sonra etkinlik türü değiştirilemez.
+### Etkinlik başlamadan değiştirilebilir
 
-## Diğer bilgiler
+```text
+description
+image
+location / onlineLink
+startAt
+endAt
+applicationEndAt
+```
 
-Etkinlik başlamadan önce izin verilen alanlar değiştirilebilir.
+### Başvuru başlamadan değiştirilebilir
 
-## Etkinlik başladıktan sonra
+```text
+applicationType
+applicationStartAt
+```
 
-Etkinlik üzerinde yönetimsel değişiklik yapılamaz.
+### Kapasite
 
-Başvuru yönetimindeki:
+Başvuru başlamadan:
 
-* `PENDING`
-* `ACCEPTED`
-* `REJECTED`
-* `WAITLISTED`
+```text
+artırılabilir
+azaltılabilir
+```
 
-durumları da etkinlik başladıktan sonra değiştirilemez.
+Başvuru başladıktan sonra:
 
-Bu kural UC03'teki başvuru yönetimiyle birlikte uygulanır.
+```text
+yalnızca artırılabilir
+```
 
----
-
-# 6. Tarih ve Zaman Kuralları
-
-Etkinlik tarihleri aşağıdaki sırayı sağlamalıdır:
-
-`applicationStartAt < applicationEndAt < startAt < endAt`
-
-Ayrıca başvuru başlangıcı ile etkinlik başlangıcı arasında en az **1 gün** bulunmalıdır:
-
-`startAt - applicationStartAt >= 1 gün`
-
-### Başvuru başlangıcı
-
-`applicationStartAt` başlamadan önce değiştirilebilir.
-
-Başvuru başladıktan sonra değiştirilemez.
-
-### Başvuru bitişi
-
-`applicationEndAt`, etkinlik başlamadan önce değiştirilebilir.
-
-### Etkinlik başlangıç ve bitişi
-
-`startAt` ve `endAt`, etkinlik başlamadan önce değiştirilebilir.
-
-Etkinlik başladıktan sonra değiştirilemez.
+Etkinlik başladıktan sonra hiçbir etkinlik düzenleme işlemi yapılamaz.
 
 ---
 
-# 7. Kapasite Kuralları
+# 6. Başvuru Kurallarının Endpointlere Etkisi
 
-Kapasite isteğe bağlıdır.
+Etkinlik endpointleri doğrudan Application status yönetimi yapmaz; ancak etkinliğin `applicationType`, kapasite ve tarih bilgileri UC-01 ve UC-03'teki başvuru davranışını belirler.
 
-### Kapasite belirtilmemişse
+## 6.1. PUBLIC
 
-Etkinlik sınırsız kontenjanlı kabul edilir.
+Başvuru oluşturulduğunda sistem:
 
-### Kapasite belirtilmişse
+```text
+Kapasite yok / yer var
+        ↓
+ACCEPTED
+```
 
-Başvuruların kabul ve bekleme listesi davranışları kapasiteye göre yürütülür.
+veya:
 
-Kapasite:
+```text
+Kapasite dolu
+        ↓
+WAITLISTED
+```
 
-* etkinlik oluşturulurken belirlenebilir,
-* başvuru süreci başlamadan önce artırılabilir veya azaltılabilir,
-* başvurular başladıktan sonra azaltılamaz,
-* başvurular başladıktan sonra artırılabilir.
+oluşturur.
 
-Kapasite ve başvuruların kabul/bekleme listesi davranışları UC01 ve UC03 kapsamında uygulanır.
+`PENDING` oluşturulmaz.
+
+## 6.2. APPROVAL_REQUIRED
+
+Başvuru oluşturulduğunda:
+
+```text
+PENDING
+```
+
+oluşturulur.
+
+Kapasitenin dolu olması `PENDING` oluşturulmasını engellemez.
+
+Daha sonra UC-03 kapsamında yönetici:
+
+```text
+PENDING → ACCEPTED
+PENDING → WAITLISTED
+PENDING → REJECTED
+```
+
+geçişlerinden uygun olanını gerçekleştirebilir.
+
+Bu davranışın ayrıntıları UC-01 ve UC-03 API endpointlerinde tanımlanır.
 
 ---
 
-# 8. Etkinlik Türleri
+# 7. Kapasite Açılması ve Otomatik İşlemler
 
-Etkinlik iki türden biri olabilir:
+Etkinlik kapasitesinde boşluk oluştuğunda sistem uygun `WAITLISTED` başvuruları otomatik olarak işler.
 
-* `PHYSICAL`
-* `ONLINE`
+Kapasite şu nedenlerle açılabilir:
 
-### `PHYSICAL`
+```text
+ACCEPTED → WITHDRAWN
+```
 
-Etkinlik fiziksel bir konumda gerçekleştirilir ve `location` bilgisi tutulur.
+```text
+ACCEPTED → REJECTED
+```
 
-### `ONLINE`
+veya kapasitenin artırılması.
 
-Etkinlik çevrim içi gerçekleştirilir ve `onlineLink` bilgisi tutulur.
+Örneğin:
+
+```text
+capacity = 50
+ACCEPTED = 50
+WAITLISTED = 10
+```
+
+durumunda bir kabul edilmiş başvuru geri çekilirse:
+
+```text
+ACCEPTED = 49
+```
+
+olur.
+
+Sistem:
+
+```text
+ilk WAITLISTED
+       ↓
+ACCEPTED
+```
+
+geçişini otomatik gerçekleştirir.
+
+Bu işlem Application endpointinden bağımsız bir domain kuralıdır.
+
+---
+
+# 8. Etkinlik Başlangıcı
+
+Etkinlik başlangıç zamanı:
+
+```text
+now >= startAt
+```
+
+olduğunda etkinliğin başvuru ve yönetim açısından kritik sınırı oluşur.
+
+Bu noktadan sonra:
+
+* yeni başvuru alınmaz,
+* Application status değiştirilemez,
+* öğrenci başvurusunu geri çekemez,
+* Event üzerinde yönetimsel düzenleme yapılamaz.
+
+Application status geçişlerinin ayrıntıları UC-03'te tanımlanır.
+
+Attendance süreci ise ayrı bir model olarak devam eder.
+
+---
+
+# 9. Tarih ve Zaman Kuralları
+
+Event oluşturma ve düzenleme işlemlerinde aşağıdaki temel ilişki korunmalıdır:
+
+```text
+applicationStartAt
+        <
+applicationEndAt
+        <
+startAt
+        <
+endAt
+```
+
+Dolayısıyla:
+
+```text
+applicationStartAt < applicationEndAt < startAt < endAt
+```
+
+geçerli olmalıdır.
+
+Ayrıca:
+
+```text
+applicationEndAt <= startAt
+```
+
+kuralı korunmalıdır.
+
+### Minimum başvuru süresi
+
+Başvuru başlangıcı ile etkinlik başlangıcı arasında zorunlu minimum süre konusunda henüz kesin karar verilmemiştir.
+
+Bu nedenle API contract aşamasında şu anda:
+
+```text
+startAt - applicationStartAt >= 1 gün
+```
+
+gibi sabit bir kural tanımlanmamalıdır.
+
+Bu karar daha sonra ayrıca belirlenebilir.
+
+---
+
+# 10. Etkinlik Türleri
+
+Etkinlik:
+
+```text
+PHYSICAL
+ONLINE
+```
+
+türlerinden biri olabilir.
+
+### PHYSICAL
+
+```text
+location
+```
+
+bilgisi kullanılır.
+
+### ONLINE
+
+```text
+onlineLink
+```
+
+bilgisi kullanılır.
 
 Etkinlik türü yayınlandıktan sonra değiştirilemez.
 
-QR ile katılım gibi etkinlik türüne bağlı katılım ayrıntıları ilgili kullanım durumunda ayrıca ele alınır.
+Online platformun ayrıca enum olarak tutulması bu endpoint contractı için zorunlu değildir.
 
 ---
 
-# 9. Başvuru Türleri
+# 11. Yetki Kontrolü
 
-Etkinlik iki başvuru tipinden biriyle yayınlanabilir:
+Etkinlik yönetim endpointlerinde yetki kontrolü iki seviyede değerlendirilmelidir:
 
-### `PUBLIC`
+### 1. Kimlik doğrulama
 
-Başvurular kapasite ve sistem kurallarına göre otomatik olarak değerlendirilir.
+Kullanıcı sisteme giriş yapmış olmalıdır.
 
-### `APPROVAL_REQUIRED`
+### 2. Kulüp yöneticiliği
 
-Başvurular kulüp yöneticilerinin değerlendirmesine sunulur.
+Kullanıcının:
 
-Bu iki başvuru tipinin başvuru davranışları UC01 ve UC03 içerisinde tanımlanır.
+```text
+ClubMember.club = Event.club
+```
 
-Başvuru tipi, başvuru süreci başlamadan önce değiştirilebilir. Başvuru başladıktan sonra değiştirilemez.
+ilişkisi üzerinden aktif yöneticilik rolü bulunmalıdır.
+
+Geçerli roller:
+
+```text
+PRESIDENT
+VICE_PRESIDENT
+MANAGER
+```
+
+Başka bir kulübün yöneticisi aynı endpointi kullansa bile etkinliği yönetemez.
+
+Yetki kontrolü endpoint path'inde verilen `clubId` veya `eventId` ile kullanıcının `ClubMember` ilişkisi üzerinden yapılmalıdır.
 
 ---
 
-# 10. Endpoint Özeti
+# 12. Endpoint Özeti
 
-| İşlem                       | Endpoint                          | Yetki                                   |
-| --------------------------- | --------------------------------- | --------------------------------------- |
-| Etkinlik oluştur ve yayınla | `POST /clubs/{clubId}/events`     | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Etkinlik detayını görüntüle | `GET /events/{eventId}`           | Giriş yapmış kullanıcı                  |
-| Etkinliği düzenle           | `PATCH /events/{eventId}`         | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Etkinliği iptal et          | `POST /events/{eventId}/cancel`   | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Etkinliği tamamla           | `POST /events/{eventId}/complete` | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Etkinliği sil               | `DELETE /events/{eventId}`        | İlgili kulüp yöneticisi / yetkili ADMIN |
+| İşlem                       | Endpoint                          | Yetki                                     |
+| --------------------------- | --------------------------------- | ----------------------------------------- |
+| Etkinlik oluştur ve yayınla | `POST /clubs/{clubId}/events`     | İlgili kulübün aktif yöneticisi           |
+| Etkinlik detayını görüntüle | `GET /events/{eventId}`           | Giriş yapmış kullanıcı                    |
+| Etkinliği düzenle           | `PATCH /events/{eventId}`         | İlgili kulübün aktif yöneticisi           |
+| Etkinliği iptal et          | `POST /events/{eventId}/cancel`   | İlgili kulübün aktif yöneticisi           |
+| Etkinliği tamamla           | `POST /events/{eventId}/complete` | Tamamlama mekanizmasına göre belirlenecek |
+| Etkinliği sil               | `DELETE /events/{eventId}`        | İlgili kulübün aktif yöneticisi           |
+
+`GET /events/{eventId}` UC-01 ile ortak endpoint olarak kullanılabilir.
 
 ---
 
-# 11. UC02 Kapsamı
+# 13. Endpointlerin UC'lerle İlişkisi
 
-UC02 aşağıdaki işlemleri kapsar:
+### UC-01
 
-1. Kulüp yöneticisinin etkinlik oluşturması
-2. Etkinliğin oluşturulurken yayınlanması
-3. Yayınlanmış etkinliğin görüntülenmesi
-4. Etkinlik bilgilerinin etkinlik başlamadan önce düzenlenmesi
-5. Yayınlandıktan sonra etkinlik adının ve türünün değiştirilememesi
-6. Etkinlik kapasitesinin zaman kurallarına göre yönetilmesi
-7. Etkinliğin tamamlanması
-8. Etkinliğin iptal edilmesi
-9. Kullanıcı etkileşimi başlamamış etkinliğin belirli koşullarda silinmesi
-10. Etkinlik yönetimindeki yetki kontrolleri
-11. Etkinlik tarihleri ve durum geçişlerinin kontrol edilmesi
+Öğrencinin:
 
-Başvuru yönetimi UC03'te, öğrencinin başvuru ve katılım süreci UC01'de, bildirim işlemleri ise UC04'te ele alınır.
+* etkinlikleri görüntülemesi,
+* etkinlik detayını görüntülemesi,
+* başvuru oluşturması,
+* başvurusunu takip etmesi,
+* başvurusunu geri çekmesi,
+* katılım durumunu görüntülemesi
+
+işlemlerini kapsar.
+
+Bu nedenle:
+
+```text
+GET /events/{eventId}
+```
+
+UC-01 tarafından da kullanılabilir.
+
+### UC-02
+
+Kulüp yöneticisinin:
+
+* etkinlik oluşturması,
+* etkinliği yayınlaması,
+* etkinliği düzenlemesi,
+* kapasiteyi değiştirmesi,
+* etkinliği iptal etmesi,
+* uygun koşullarda etkinliği silmesi
+
+işlemlerini kapsar.
+
+### UC-03
+
+Kulüp yöneticisinin:
+
+* başvuruları görüntülemesi,
+* `PENDING` başvuruları değerlendirmesi,
+* kabul/ret/yedek kararları vermesi,
+* mevcut kararları düzeltmesi,
+* Attendance kayıtlarını yönetmesi
+
+işlemlerini kapsar.
+
+---
+
+# 14. Açık API Kararları
+
+Aşağıdaki konular endpointlerin ayrıntılı contract aşamasında kesinleştirilecektir:
+
+1. Request body alanlarının tam JSON yapısı.
+2. Response DTO yapısı.
+3. Pagination ve filtreleme kuralları.
+4. HTTP status kodları.
+5. Validation error formatı.
+6. Event bulunamadığında dönecek hata.
+7. Yetkisiz kulüp yöneticisinin alacağı hata.
+8. `PATCH` içinde değiştirilemez alan gönderildiğinde hata davranışı.
+9. Kapasite artırıldığında otomatik `WAITLISTED → ACCEPTED` işleminin transaction sınırı.
+10. `POST /events/{eventId}/complete` endpointinin gerçekten gerekli olup olmadığı.
+11. `COMPLETED` durumuna geçişin otomatik mi, manuel mi olacağı.
+12. Event tarihi değiştirildiğinde mevcut Application kayıtlarına etkiler.
+13. `applicationType` başvuru başlamadan değiştirildiğinde mevcut kayıtların nasıl ele alınacağı.
+14. Online etkinlik bağlantısının kimlere ve ne zaman gösterileceği.
+15. İptal sonrası öğrencilere gönderilecek bildirimlerin endpoint davranışı.
+16. Fiziksel olarak silinen Event için audit/log tutulup tutulmayacağı.
+
+---
+
+# 15. Kapsam Dışı
+
+Bu endpoint dokümanı aşağıdaki konuları ayrıntılı olarak tanımlamaz:
+
+* Öğrenci başvuru endpointleri → UC-01
+* Başvuru yönetimi → UC-03
+* Attendance geçiş kuralları → ilgili Attendance tasarımı
+* Bildirimler → UC-04
+* Kulüp oluşturma/doğrulama
+* Kulüp üyeliği ve takip
+* Global admin işlemleri
+* Ban/engelleme sistemi
+* Detaylı audit/history sistemi
+* Ayrıntılı response/error contractları
+
+Ban/engelleme sistemi MVP kapsamında değildir ve `BAN` bir Application status olarak modellenmez.

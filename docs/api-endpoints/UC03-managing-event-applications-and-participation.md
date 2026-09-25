@@ -10,7 +10,7 @@ Kulüp yöneticisi olmak ayrı bir kullanıcı tipi değildir. Kullanıcı, `Clu
 
 ---
 
-## 2. Yetki
+# 2. Yetki
 
 Başvuru ve katılım yönetimi için kullanıcının:
 
@@ -22,7 +22,7 @@ gerekir.
 
 Kullanıcı başka kulüplerin etkinliklerine ait başvuru ve katılım kayıtlarını yönetemez.
 
-Sistem yöneticisi (`ADMIN`) ise sistem genelindeki yönetim yetkileri kapsamında gerekli yönetim işlemlerini gerçekleştirebilir.
+Global `ADMIN`, UC03 kapsamında kulüp yöneticisinin yerine normal etkinlik başvuru ve katılım yönetimi yapan bir aktör olarak tanımlanmaz. Global yönetici işlemleri ayrı bir yönetim kapsamındadır.
 
 ---
 
@@ -40,18 +40,21 @@ Yanıtta başvuru ile ilgili temel bilgiler bulunabilir:
 * başvuran kullanıcı bilgileri
 * başvuru durumu
 * başvuru tarihi
+* gerekli görülen diğer başvuru bilgileri
 
-Başvurular başvuru tarihine göre sıralanabilir. Bu sıralama özellikle bekleme listesi önceliğinin belirlenmesinde kullanılabilir.
+Başvurular `appliedAt` değerine göre sıralanabilir.
+
+Bu sıralama özellikle bekleme listesi önceliğinin belirlenmesinde kullanılabilir.
 
 ### Yetki
 
-Yalnızca:
+Yalnızca ilgili kulübün:
 
-* ilgili kulübün `PRESIDENT`
+* `PRESIDENT`
 * `VICE_PRESIDENT`
 * `MANAGER`
 
-rollerinden birine sahip kullanıcıları ve yetkili `ADMIN` işlemi gerçekleştirebilir.
+rollerinden birine sahip kullanıcıları işlemi gerçekleştirebilir.
 
 ---
 
@@ -61,21 +64,27 @@ rollerinden birine sahip kullanıcıları ve yetkili `ADMIN` işlemi gerçekleş
 
 Bir başvuruyu kabul eder.
 
-Geçerli durum geçişleri:
+Yönetici tarafından gerçekleştirilebilecek geçerli durum geçişleri:
 
 * `PENDING → ACCEPTED`
-* `WAITLISTED → ACCEPTED`
 * `REJECTED → ACCEPTED`
 
-`REJECTED → ACCEPTED` geçişi, yöneticinin daha önce verdiği bir kararı düzeltmesi amacıyla kullanılabilir.
+`REJECTED → ACCEPTED` geçişi, yöneticinin daha önce verdiği bir kararı etkinlik başlamadan önce düzeltmesi amacıyla kullanılabilir.
+
+`WAITLISTED → ACCEPTED` normal yönetici kabul işlemi olarak kullanılmaz. Bekleme listesindeki başvurular, kapasite açılması veya kapasite artırılması durumunda sistem tarafından öncelik sırasına göre otomatik olarak `ACCEPTED` durumuna geçirilebilir.
 
 ### Kapasite kontrolü
 
-Etkinliğin kapasitesi belirlenmişse kabul işlemi sırasında kapasite kontrol edilir.
+Etkinliğin kapasitesi belirlenmişse kabul işlemi sırasında mevcut `ACCEPTED` başvuru sayısı kontrol edilir.
 
-Kapasite doluysa başvuru doğrudan `ACCEPTED` durumuna geçirilemez.
+Kapasite doluysa:
 
-Kapasite değişiklikleri ve bekleme listesinin işleyişi etkinliğin `applicationType` ve kapasite kurallarına göre uygulanır.
+* `PENDING → ACCEPTED`
+* `REJECTED → ACCEPTED`
+
+geçişleri gerçekleştirilemez.
+
+Kapasite açıldığında veya artırıldığında uygun `WAITLISTED` kayıtları sistem tarafından otomatik olarak işlenir.
 
 ---
 
@@ -90,15 +99,17 @@ Geçerli durum geçişleri:
 * `PENDING → REJECTED`
 * `ACCEPTED → REJECTED`
 
-`ACCEPTED → REJECTED` geçişi, etkinlik başlamadan önce yöneticinin daha önce kabul ettiği bir başvuruyu düzeltmesi amacıyla kullanılabilir.
+`ACCEPTED → REJECTED` geçişi, etkinlik başlamadan önce yöneticinin daha önce verdiği kabul kararını düzeltmesi amacıyla kullanılabilir.
 
-Başvuru reddedildiğinde başvuru kaydı silinmez ve durumu `REJECTED` olarak korunur.
+Başvuru reddedildiğinde `Application` kaydı silinmez ve durumu `REJECTED` olarak korunur.
+
+`ACCEPTED → REJECTED` sonucunda bir kapasite açılırsa uygun bekleme listesi kaydı sistem tarafından otomatik olarak `ACCEPTED` durumuna geçirilebilir.
 
 ### Reddetme sebebi
 
-`rejectionReason` bilgisi şimdilik opsiyoneldir (`nullable`).
+`rejectionReason` şu an için `nullable` olarak tutulabilir.
 
-İleride reddetme sebebinin request body içerisinde zorunlu tutulmasına yönelik bir kural eklenebilir.
+Reddetme sebebinin hangi durumlarda zorunlu olacağı ve request body içerisinde zorunlu hale getirilip getirilmeyeceği ayrıca kesinleştirilecektir.
 
 ---
 
@@ -108,15 +119,33 @@ Başvuru reddedildiğinde başvuru kaydı silinmez ve durumu `REJECTED` olarak k
 
 Bir başvuruyu bekleme listesine alır.
 
-Geçerli durum geçişi:
+Geçerli yönetici durum geçişi:
 
 `PENDING → WAITLISTED`
 
-Bekleme listesi kapasitesi sınırlı etkinliklerde kullanılır.
+Bu işlem yalnızca bekleme listesinin kullanılabileceği, kapasitesi belirlenmiş etkinliklerde uygulanabilir.
 
-`PUBLIC` etkinliklerde kapasite dolduğunda yeni başvurular sistem tarafından otomatik olarak `WAITLISTED` durumuna alınabilir.
+### `PUBLIC`
 
-`APPROVAL_REQUIRED` etkinliklerde ise başvuruyu bekleme listesine alma kararı kulüp yöneticisi tarafından verilebilir.
+`PUBLIC` etkinliklerde kapasite dolduğunda yeni başvuru sistem tarafından otomatik olarak:
+
+`WAITLISTED`
+
+durumuna alınabilir.
+
+Yönetici tarafından ayrıca bekleme listesine alma işlemi yapılmaz.
+
+### `APPROVAL_REQUIRED`
+
+`APPROVAL_REQUIRED` etkinliklerde yeni başvurular `PENDING` durumunda oluşturulur.
+
+Yönetici başvuruyu:
+
+* kabul edebilir,
+* reddedebilir,
+* bekleme listesine alabilir.
+
+Kapasitenin dolu olması başvurunun otomatik olarak `WAITLISTED` yapılmasını zorunlu kılmaz.
 
 ---
 
@@ -134,26 +163,19 @@ Bekleme listesi kapasitesi sınırlı etkinliklerde kullanılır.
 
 ### Temel durum geçişleri
 
-| Mevcut Durum | Yeni Durumlar                        |
-| ------------ | ------------------------------------ |
-| `PENDING`    | `ACCEPTED`, `REJECTED`, `WAITLISTED` |
-| `WAITLISTED` | `ACCEPTED`                           |
-| `ACCEPTED`   | `REJECTED`                           |
-| `REJECTED`   | `ACCEPTED`                           |
+| Mevcut Durum | Yeni Durum   | İşlemi Yapan |
+| ------------ | ------------ | ------------ |
+| `PENDING`    | `ACCEPTED`   | Yönetici     |
+| `PENDING`    | `REJECTED`   | Yönetici     |
+| `PENDING`    | `WAITLISTED` | Yönetici     |
+| `WAITLISTED` | `ACCEPTED`   | Sistem       |
+| `ACCEPTED`   | `REJECTED`   | Yönetici     |
+| `REJECTED`   | `ACCEPTED`   | Yönetici     |
+| `PENDING`    | `WITHDRAWN`  | Öğrenci      |
+| `WAITLISTED` | `WITHDRAWN`  | Öğrenci      |
+| `ACCEPTED`   | `WITHDRAWN`  | Öğrenci      |
 
-Öğrencinin başvurusunu geri çekmesi UC01 kapsamında:
-
-`PENDING → WITHDRAWN`
-
-veya
-
-`WAITLISTED → WITHDRAWN`
-
-veya
-
-`ACCEPTED → WITHDRAWN`
-
-şeklinde gerçekleşebilir.
+`WAITLISTED → ACCEPTED` geçişi normalde sistem tarafından gerçekleştirilir.
 
 `WITHDRAWN` durumundaki eski kayıt yeniden `ACCEPTED`, `PENDING` veya başka bir aktif duruma geçirilmez.
 
@@ -167,15 +189,15 @@ veya
 
 Yeni başvurular alınabilir.
 
-Başvurular ilgili etkinliğin `applicationType` değerine göre otomatik veya yönetici değerlendirmesiyle işlenir.
+Başvurular etkinliğin `applicationType` değerine göre otomatik veya yönetici değerlendirmesiyle işlenir.
 
 ## Başvuru süresi bittikten sonra
 
 Yeni başvuru alınamaz.
 
-Ancak daha önce oluşturulmuş başvurular yönetici tarafından değerlendirilmeye devam edilebilir.
+Ancak daha önce oluşturulmuş `PENDING` başvurular yönetici tarafından değerlendirilmeye devam edebilir.
 
-Örneğin başvuru süresi bittikten sonra:
+Örneğin:
 
 `PENDING → ACCEPTED`
 
@@ -185,11 +207,13 @@ veya
 
 işlemleri gerçekleştirilebilir.
 
+Başvuru süresinin sona ermesi, mevcut başvuruların otomatik olarak reddedildiği anlamına gelmez.
+
 ## Etkinlik başladıktan sonra
 
 Başvuru kararları değiştirilemez.
 
-Aşağıdaki durum değişiklikleri etkinlik başladıktan sonra yapılamaz:
+Aşağıdaki yönetici işlemleri etkinlik başladıktan sonra gerçekleştirilemez:
 
 * `PENDING → ACCEPTED`
 * `PENDING → REJECTED`
@@ -198,7 +222,7 @@ Aşağıdaki durum değişiklikleri etkinlik başladıktan sonra yapılamaz:
 * `ACCEPTED → REJECTED`
 * `REJECTED → ACCEPTED`
 
-Öğrencinin başvuruyu geri çekmesiyle ilgili kurallar UC01 kapsamında ayrıca uygulanır.
+Öğrencinin başvurusunu geri çekmesiyle ilgili kurallar UC01 kapsamında uygulanır.
 
 ---
 
@@ -206,15 +230,15 @@ Aşağıdaki durum değişiklikleri etkinlik başladıktan sonra yapılamaz:
 
 Etkinliğin `applicationType` değeri `PUBLIC` ise başvurular sistem tarafından otomatik olarak değerlendirilir.
 
-### Kapasite belirtilmemişse
+## Kapasite belirtilmemişse
 
-Başvuru otomatik olarak:
+Yeni başvuru doğrudan:
 
 `ACCEPTED`
 
-durumuna geçirilir.
+durumunda oluşturulur.
 
-### Kapasite belirtilmişse
+## Kapasite belirtilmişse
 
 Kapasitede yer varsa:
 
@@ -224,13 +248,20 @@ Kapasite doluysa:
 
 `WAITLISTED`
 
-durumuna geçirilir.
+durumunda oluşturulur.
 
-### Bekleme listesi
+## Bekleme listesi
 
-Bekleme listesi başvuru zamanına göre önceliklendirilir.
+Bekleme listesi `appliedAt` değerine göre önceliklendirilir.
 
-Kabul edilen bir kullanıcı başvurusunu geri çekerse boşalan kontenjan, uygun durumdaki ilk bekleme listesi başvurusuna açılır.
+Bir `ACCEPTED` başvuru:
+
+* öğrenci tarafından `WITHDRAWN` olduğunda,
+* yönetici tarafından `REJECTED` olduğunda
+
+veya etkinlik kapasitesi artırıldığında boşalan kontenjan için sistem bekleme listesini değerlendirir.
+
+Uygun durumdaki ilk bekleme listesi başvuruları sırasıyla `ACCEPTED` durumuna geçirilir.
 
 ---
 
@@ -248,29 +279,42 @@ Kulüp yöneticisi başvuruyu:
 * reddedebilir,
 * bekleme listesine alabilir.
 
-Kapasite dolu olduğunda başvurunun otomatik olarak bekleme listesine alınması zorunlu değildir. Yönetici başvurunun durumuna karar verir.
+Kapasitenin dolu olması başvurunun otomatik olarak `WAITLISTED` yapılmasını zorunlu kılmaz.
+
+Yönetici kararını başvurunun mevcut durumuna ve etkinliğin kapasite kurallarına göre verir.
 
 ---
 
 # 8. Kapasite ve Bekleme Listesi Kuralları
 
-Kapasitesi belirlenmiş etkinliklerde kabul işlemleri mevcut kabul edilmiş başvuru sayısı dikkate alınarak gerçekleştirilir.
+Kapasitesi belirlenmiş etkinliklerde kabul işlemleri mevcut `ACCEPTED` başvuru sayısı dikkate alınarak gerçekleştirilir.
 
-Bir kullanıcı `ACCEPTED` durumundan `WITHDRAWN` durumuna geçtiğinde ilgili kontenjan boşalır.
+`PENDING` ve `WAITLISTED` başvurular kabul edilmiş kontenjan hesabına dahil edilmez.
 
-Boşalan kontenjan için bekleme listesi varsa, öncelik sırasındaki uygun başvuru `ACCEPTED` durumuna geçirilebilir.
+Bir kullanıcı:
 
-Bekleme listesinde öncelik:
+`ACCEPTED → WITHDRAWN`
 
-`appliedAt`
+geçişi yaptığında ilgili kontenjan boşalır.
 
-zamanına göre belirlenir.
+Benzer şekilde:
 
-Etkinlik kapasitesi UC02'de tanımlanan kurallara göre yönetilir:
+`ACCEPTED → REJECTED`
 
-* başvuru başlamadan önce artırılabilir veya azaltılabilir,
-* başvurular başladıktan sonra azaltılamaz,
-* başvurular başladıktan sonra artırılabilir.
+geçişi de kontenjan açar.
+
+Boşalan kontenjan için bekleme listesi varsa sistem, `appliedAt` sırasına göre uygun başvuruları otomatik olarak `ACCEPTED` durumuna geçirir.
+
+Etkinlik kapasitesi artırıldığında da aynı otomatik bekleme listesi işlemi uygulanır.
+
+Kapasitesi olmayan etkinliklerde kapasite sınırı bulunmadığından `WAITLISTED` durumu kullanılmaz.
+
+Kapasite değişiklikleri UC02'de tanımlanan kurallara göre yönetilir:
+
+* başvuru başlamadan önce kapasite artırılabilir veya azaltılabilir,
+* kapasite mevcut `ACCEPTED` sayısının altına düşürülemez,
+* başvurular başladıktan sonra kapasite azaltılamaz,
+* başvurular başladıktan sonra kapasite artırılabilir.
 
 ---
 
@@ -280,7 +324,7 @@ Etkinlik kapasitesi UC02'de tanımlanan kurallara göre yönetilir:
 
 Belirtilen etkinliğin katılım kayıtlarını getirir.
 
-Katılım kayıtları `Application` üzerinden etkinliğe bağlanır.
+Katılım kayıtları etkinliğe ait `Application` kayıtları üzerinden ilgili kullanıcıya bağlanır.
 
 Yanıtta örneğin:
 
@@ -289,19 +333,19 @@ Yanıtta örneğin:
 * katılım durumu
 * katılım kaydı
 
-gibi bilgiler bulunabilir.
+bulunabilir.
 
-Katılım listesi etkinliğin kabul edilmiş katılımcıları üzerinden oluşturulur.
+Katılım listesi etkinliğin `ACCEPTED` katılımcıları üzerinden oluşturulur.
 
 ### Yetki
 
-Yalnızca:
+Yalnızca ilgili kulübün:
 
-* ilgili kulübün `PRESIDENT`
+* `PRESIDENT`
 * `VICE_PRESIDENT`
 * `MANAGER`
 
-rollerinden birine sahip kullanıcıları ve yetkili `ADMIN` işlemi gerçekleştirebilir.
+rollerinden birine sahip kullanıcıları işlemi gerçekleştirebilir.
 
 ---
 
@@ -315,7 +359,7 @@ rollerinden birine sahip kullanıcıları ve yetkili `ADMIN` işlemi gerçekleş
 | `ATTENDED`     | Kullanıcı etkinliğe katıldı   |
 | `NOT_ATTENDED` | Kullanıcı etkinliğe katılmadı |
 
-### Katılım kaydının oluşturulması
+## Katılım kaydının oluşturulması
 
 Etkinlik başladığında `ACCEPTED` durumundaki başvurular için `Attendance` kaydı oluşturulur.
 
@@ -325,17 +369,17 @@ Başlangıç durumu:
 
 olur.
 
-Öğrenci etkinlik QR kodunu başarıyla tarattığında:
+Öğrenci etkinliğin QR kodunu başarıyla tarattığında:
 
 `NULL → ATTENDED`
 
 geçişi gerçekleşir.
 
-Etkinlik sona erdiğinde `NULL` olarak kalan kayıtlar sistem tarafından:
+Etkinlik tamamlandığında `NULL` olarak kalan kayıtlar sistem tarafından:
 
 `NULL → NOT_ATTENDED`
 
-durumuna geçirilir.
+durumuna geçirilebilir.
 
 ---
 
@@ -353,7 +397,7 @@ Yetkili kulüp yöneticisinin mevcut katılım durumunu düzeltmesini sağlar.
 }
 ```
 
-### İzin verilen geçişler
+### Yönetici tarafından izin verilen geçişler
 
 * `ATTENDED → NOT_ATTENDED`
 * `NOT_ATTENDED → ATTENDED`
@@ -371,23 +415,13 @@ geçişleri yapılamaz.
 
 Katılım düzeltmesi etkinlik `COMPLETED` durumuna geldikten sonra da yapılabilir.
 
-Örneğin etkinlik tamamlandıktan sonra yanlışlık fark edilirse:
+Örneğin daha sonra fark edilen bir hata için:
 
-`ATTENDED → NOT_ATTENDED`
-
-veya
-
-`NOT_ATTENDED → ATTENDED`
+`ATTENDED ↔ NOT_ATTENDED`
 
 düzeltmesi gerçekleştirilebilir.
 
-### Alternatif endpoint
-
-İleride daha aksiyon odaklı bir API yapısına ihtiyaç duyulursa:
-
-`POST /attendance/{attendanceId}/correct`
-
-yaklaşımı değerlendirilebilir.
+Bu nedenle etkinliğin `COMPLETED` olması katılım kayıtlarının tamamen değiştirilemez hale gelmesi anlamına gelmez.
 
 MVP kapsamında kullanılan endpoint:
 
@@ -414,27 +448,27 @@ Etkinlik geçmişte `CANCELLED` olarak görüntülenmeye devam eder.
 
 # 13. Etkinlik Başladıktan Sonraki Kurallar
 
-Etkinlik başladıktan sonra başvuru kararları değiştirilemez.
-
-Buna karşılık katılım süreci devam eder.
-
-Bu nedenle:
+Etkinlik başladıktan sonra başvuru süreci kapanır.
 
 ### Başvuru
 
+Aşağıdaki `Application` durumları arasında yönetici tarafından yeni karar verilemez:
+
 `PENDING / ACCEPTED / REJECTED / WAITLISTED`
 
-durumları arasında yönetici tarafından yeni karar verilemez.
+Öğrencinin başvurusunu geri çekmesi de etkinlik başladıktan sonra yapılamaz.
 
 ### Katılım
 
-QR taraması ile:
+Etkinlik başladıktan sonra katılım süreci devam eder.
+
+Kabul edilmiş katılımcı için:
 
 `NULL → ATTENDED`
 
-gerçekleşebilir.
+QR taraması ile gerçekleşebilir.
 
-Etkinlik tamamlandığında `NULL` kalan katılımlar:
+Etkinlik tamamlandığında `NULL` kalan katılım kayıtları:
 
 `NULL → NOT_ATTENDED`
 
@@ -450,14 +484,20 @@ düzeltmesi yapabilir.
 
 # 14. Endpoint Özeti
 
-| İşlem                          | Endpoint                                      | Yetki                                   |
-| ------------------------------ | --------------------------------------------- | --------------------------------------- |
-| Etkinlik başvurularını listele | `GET /events/{eventId}/applications`          | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Başvuruyu kabul et             | `POST /applications/{applicationId}/accept`   | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Başvuruyu reddet               | `POST /applications/{applicationId}/reject`   | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Başvuruyu bekleme listesine al | `POST /applications/{applicationId}/waitlist` | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Katılım listesini görüntüle    | `GET /events/{eventId}/attendance`            | İlgili kulüp yöneticisi / yetkili ADMIN |
-| Katılım durumunu düzelt        | `PATCH /attendance/{attendanceId}`            | İlgili kulüp yöneticisi / yetkili ADMIN |
+| İşlem                          | Endpoint                                      | Yetki                   |
+| ------------------------------ | --------------------------------------------- | ----------------------- |
+| Etkinlik başvurularını listele | `GET /events/{eventId}/applications`          | İlgili kulüp yöneticisi |
+| Başvuruyu kabul et             | `POST /applications/{applicationId}/accept`   | İlgili kulüp yöneticisi |
+| Başvuruyu reddet               | `POST /applications/{applicationId}/reject`   | İlgili kulüp yöneticisi |
+| Başvuruyu bekleme listesine al | `POST /applications/{applicationId}/waitlist` | İlgili kulüp yöneticisi |
+| Katılım listesini görüntüle    | `GET /events/{eventId}/attendance`            | İlgili kulüp yöneticisi |
+| Katılım durumunu düzelt        | `PATCH /attendance/{attendanceId}`            | İlgili kulüp yöneticisi |
+
+Sistem tarafından otomatik gerçekleştirilen işlemler ayrı bir kullanıcı endpoint'i olarak tanımlanmaz:
+
+* `WAITLISTED → ACCEPTED`
+* `NULL → NOT_ATTENDED`
+* `PUBLIC` başvurularının otomatik `ACCEPTED` / `WAITLISTED` belirlenmesi
 
 ---
 
@@ -466,16 +506,18 @@ düzeltmesi yapabilir.
 UC03 aşağıdaki işlemleri kapsar:
 
 1. Kulüp yöneticisinin etkinlik başvurularını görüntülemesi
-2. Başvuruların `PENDING`, `ACCEPTED`, `REJECTED`, `WAITLISTED` ve `WITHDRAWN` durumlarının yönetilmesi
-3. `PUBLIC` etkinliklerde otomatik kabul ve bekleme listesi davranışının uygulanması
-4. `APPROVAL_REQUIRED` etkinliklerde yönetici değerlendirmesinin yapılması
-5. Kapasite ve bekleme listesi kurallarının uygulanması
-6. Kabul edilen başvuruların geri çekilmesi sonucunda kontenjanın yeniden değerlendirilmesi
-7. Etkinlik başladıktan sonra başvuru kararlarının değiştirilememesi
-8. Etkinlik katılım kayıtlarının görüntülenmesi
-9. QR ile gerçekleşen katılım sonuçlarının görüntülenmesi
-10. `ATTENDED` ve `NOT_ATTENDED` durumlarının yönetici tarafından düzeltilmesi
-11. Etkinlik tamamlandıktan sonra katılım düzeltmelerinin yapılabilmesi
-12. İptal edilen etkinliklerde başvuru ve katılım kurallarının uygulanması
+2. Başvuruların `PENDING`, `ACCEPTED`, `REJECTED`, `WAITLISTED` durumlarının yönetilmesi
+3. `WITHDRAWN` başvurularının geçmiş kayıt olarak korunması
+4. `PUBLIC` etkinliklerde otomatik kabul ve bekleme listesi davranışının uygulanması
+5. `APPROVAL_REQUIRED` etkinliklerde yönetici değerlendirmesinin yapılması
+6. Kapasite ve bekleme listesi kurallarının uygulanması
+7. Kabul edilen başvuruların geri çekilmesi veya reddedilmesi sonucunda kontenjanın yeniden değerlendirilmesi
+8. Kapasite artışı sonucunda bekleme listesinin otomatik işlenmesi
+9. Etkinlik başladıktan sonra başvuru kararlarının değiştirilememesi
+10. Etkinlik katılım kayıtlarının görüntülenmesi
+11. QR ile gerçekleşen katılım sonuçlarının görüntülenmesi
+12. `ATTENDED` ve `NOT_ATTENDED` durumlarının yönetici tarafından düzeltilmesi
+13. Etkinlik tamamlandıktan sonra katılım düzeltmelerinin yapılabilmesi
+14. İptal edilen etkinliklerde başvuru ve katılım kurallarının uygulanması
 
 Öğrencinin etkinliğe başvurması, başvurusunu geri çekmesi ve QR ile katılım sağlaması UC01'de; etkinliğin oluşturulması, düzenlenmesi, tamamlanması ve iptal edilmesi UC02'de; bildirim işlemleri ise UC04'te ele alınır.

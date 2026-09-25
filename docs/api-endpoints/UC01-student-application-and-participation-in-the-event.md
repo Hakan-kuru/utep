@@ -2,7 +2,7 @@
 
 Bu doküman, UC01 kapsamında öğrencinin gerçekleştirebildiği işlemler için gerekli API endpointlerini tanımlar.
 
-> **Not:** Bu aşamada endpointlerin amacı ve temel kullanım şekli belirlenmektedir. Ayrıntılı request/response modelleri, query parameter isimleri, pagination, QR veri formatı ve backend teknolojisine özgü uygulama detayları daha sonraki aşamalarda belirlenecektir.
+> **Not:** Bu aşamada endpointlerin amacı, sorumluluğu ve temel kullanım şekli belirlenmektedir. Ayrıntılı request/response modelleri, query parameter isimleri, pagination, HTTP status code'ları, hata response yapısı, QR veri formatı ve backend teknolojisine özgü uygulama detayları daha sonraki API contract aşamalarında belirlenecektir.
 
 ---
 
@@ -10,17 +10,56 @@ Bu doküman, UC01 kapsamında öğrencinin gerçekleştirebildiği işlemler iç
 
 ### `GET /events`
 
-Öğrencinin erişebildiği yayınlanmış etkinlikleri listeler.
+Öğrencinin erişebileceği etkinlikleri listeler.
 
 Kullanım alanları:
 
-* Etkinliklerin genel listelenmesi
+* Etkinliklerin genel olarak listelenmesi
+* Yaklaşan etkinliklerin görüntülenmesi
 * Geçmiş etkinliklerin filtrelenmesi
-* İleride eklenecek etkinlik filtreleri
+* İleride eklenecek etkinlik filtrelerinin uygulanması
 
 Etkinlik listesi, giriş yapmış kullanıcı için gerekli olduğunda kullanıcının ilgili etkinlikteki başvuru ve katılım durumlarını da gösterebilecek bilgileri içerebilir.
 
-> Geçmiş etkinlikler ekranı için ayrı bir endpoint oluşturulması şu aşamada planlanmamaktadır. Bu ekranın `GET /events` üzerinden filtreleme ile oluşturulması planlanmaktadır. Kullanılacak filtrelerin kesin isimleri daha sonra belirlenecektir.
+Örneğin:
+
+```text
+Android Workshop
+Başvuru: ACCEPTED
+Katılım: ATTENDED
+```
+
+Bu bilgilerin gösterilmesi için her etkinlik adına ayrı bir `GET /events/{eventId}/application` isteği yapılması zorunlu değildir. Backend uygun gördüğü durumda etkinlik listesindeki kayıtlarla kullanıcının ilişkili `Application` ve `Attendance` bilgilerini birleştirerek döndürebilir.
+
+### Geçmiş etkinlikler
+
+Geçmiş etkinlikler için ayrı bir:
+
+```text
+GET /events/history
+```
+
+veya:
+
+```text
+GET /my-events
+```
+
+endpointi şu aşamada planlanmamaktadır.
+
+Geçmiş etkinlikler, `GET /events` endpointinin uygun filtreleri kullanılarak elde edilmesi planlanmaktadır.
+
+Örneğin ileride:
+
+```text
+GET /events?status=COMPLETED
+```
+
+benzeri bir kullanım değerlendirilebilir.
+
+Kesin filtre isimleri ve filtreleme yapısı API contract aşamasında belirlenecektir.
+
+Etkinliğin `CANCELLED` veya `COMPLETED` olması gibi durumlar da etkinlik listeleme davranışının bir parçasıdır. Kullanıcıya hangi durumdaki etkinliklerin varsayılan listede gösterileceği daha sonra kesinleştirilecektir.
 
 ---
 
@@ -30,26 +69,40 @@ Etkinlik listesi, giriş yapmış kullanıcı için gerekli olduğunda kullanıc
 
 Belirli bir etkinliğin detaylarını getirir.
 
-Giriş yapmış öğrenci açısından, etkinlik bilgilerinin yanında öğrencinin bu etkinlikle ilgili durumunun gösterilebilmesi gerekir.
+Etkinlik bilgileri yanında, giriş yapmış öğrenci açısından bu etkinlikle ilgili kişisel durum bilgileri de response içerisinde sunulabilir.
 
 Örneğin:
 
-* Kendi başvuru durumu
-* Kendi katılım durumu
-
-Bu bilgiler backend tarafından ilgili `Event`, `Application` ve gerektiğinde `Attendance` verilerinden oluşturulabilir.
-
-Örneğin öğrenci bir etkinliğin detayını açtığında:
-
 ```text
 Etkinlik bilgileri
+
 Başvuru durumu: ACCEPTED
 Katılım durumu: ATTENDED
 ```
 
-şeklinde bir bilgi gösterilebilir.
+Bu bilgiler backend tarafından ilgili:
 
-Bu durumlar için mobil uygulamanın ayrı ayrı HTTP istekleri yapması zorunlu değildir. Backend gerekli verileri kendi içerisinde birleştirerek tek response döndürebilir.
+* `Event`
+* `Application`
+* `Attendance`
+
+verilerinden oluşturulabilir.
+
+Öğrencinin etkinlik detayını görüntülemesi sırasında bu üç veri için ayrı ayrı HTTP isteği yapılması zorunlu değildir.
+
+Örneğin backend tek response içerisinde:
+
+```text
+event
+application
+attendance
+```
+
+bilgilerini birleştirebilir.
+
+Öğrencinin etkinlikle ilişkili bir `Application` kaydı bulunmuyorsa bunun response içerisindeki nasıl ifade edileceği daha sonra belirlenecektir.
+
+Aynı şekilde etkinlik henüz başlamamışsa `Attendance` kaydının bulunmaması ile etkinlik başladıktan sonra `Attendance.status = NULL` olması arasındaki API gösterim şekli daha sonraki contract aşamasında netleştirilecektir.
 
 ---
 
@@ -59,16 +112,116 @@ Bu durumlar için mobil uygulamanın ayrı ayrı HTTP istekleri yapması zorunlu
 
 Giriş yapmış öğrencinin belirli bir etkinliğe başvurmasını sağlar.
 
-Öğrencinin kimliği request body üzerinden gönderilmez; backend giriş yapan kullanıcı üzerinden öğrenciyi belirler.
+Öğrencinin kimliği request body içerisinde gönderilmez. Backend, kimliği doğrulanmış kullanıcı üzerinden öğrenciyi belirler.
 
-Başvurunun başlangıç durumu etkinliğin `applicationType` ve kapasite durumuna göre belirlenir:
+Başvuru oluşturulmadan önce backend aşağıdaki gibi temel kuralları kontrol eder:
 
-* `PUBLIC` + kapasite mevcut → `ACCEPTED`
-* `PUBLIC` + kapasite dolu → `WAITLISTED`
-* `APPROVAL_REQUIRED` → `PENDING`
-* `APPROVAL_REQUIRED` + kapasite dolu → ilgili iş kurallarına göre değerlendirilir
+* Etkinlik mevcut olmalıdır.
+* Etkinlik başvuru kabul ediyor olmalıdır.
+* Başvuru dönemi başlamış olmalıdır.
+* Başvuru dönemi sona ermemiş olmalıdır.
+* Etkinlik başlamamış olmalıdır.
+* Öğrencinin aynı etkinlikte aktif bir başvurusu bulunmamalıdır.
+* Öğrencinin daha önce `REJECTED` olmuş bir başvurusu varsa yeniden başvuru yapmasına izin verilmez.
 
-Başvuru oluşturulduğunda `Application` kaydı oluşturulur.
+Başlangıç durumu
+
+Başvurunun başlangıç durumu etkinliğin applicationType, kapasite ve varsa öğrenciye uygulanan etkinlik/kulüp bazlı kısıtlamalara göre belirlenir.
+
+PUBLIC
+
+PUBLIC etkinliklerde normal koşullarda başvuru için yönetici onayı gerekmez.
+
+Kapasite sınırsızsa:
+
+PUBLIC
+  ↓
+ACCEPTED
+
+Kapasite varsa ve yer mevcutsa:
+
+PUBLIC
+  ↓
+ACCEPTED
+
+Kapasite tamamen doluysa:
+
+PUBLIC
+  ↓
+WAITLISTED
+
+Eğer ileride kulüp/etkinlik bazlı ban (engelleme) sistemi uygulanırsa, banlı bir öğrencinin başvurusu normal kapasite kurallarına göre ACCEPTED veya WAITLISTED olmak yerine sistem tarafından reddedilebilir:
+
+PUBLIC
+  ↓
+REJECTED
+
+Bu durumda REJECTED sonucunun nedeni öğrencinin banlı olması olabilir.
+
+Burada PENDING oluşturulmaz.
+
+Yani PUBLIC başvuru için normal akışta:
+
+PUBLIC
+  ↓
+ACCEPTED / WAITLISTED
+
+şeklinde doğrudan sonuç oluşur.
+
+Not: Ban/engelleme mekanizması mevcut MVP kapsamında henüz uygulanmamaktadır. Bu örnek, ileride ban özelliği eklendiğinde endpointin olası davranışını göstermek amacıyla verilmiştir. Banın veri modeli, süresi ve hangi aşamada kontrol edileceği ilgili UC/API contract aşamasında ayrıca belirlenecektir.
+
+#### `APPROVAL_REQUIRED`
+
+`APPROVAL_REQUIRED` etkinliklerde her yeni başvuru:
+
+```text
+APPROVAL_REQUIRED
+  ↓
+PENDING
+```
+
+olarak oluşturulur.
+
+Etkinliğin kapasitesinin dolu olması `PENDING` oluşturulmasına engel değildir.
+
+Örneğin etkinlik kapasitesi 50 ve 50 kişi kabul edilmiş olsa bile yeni öğrencinin başvurusu:
+
+```text
+PENDING
+```
+
+olabilir.
+
+Bu başvurunun daha sonra:
+
+```text
+PENDING → ACCEPTED
+PENDING → WAITLISTED
+PENDING → REJECTED
+```
+
+sonuçlarından hangisine dönüşeceğine kulüp yöneticisi karar verir.
+
+Dolayısıyla endpoint oluşturma sırasında `APPROVAL_REQUIRED` için kapasite dolu olduğunda doğrudan `WAITLISTED` oluşturulmaz.
+
+### Başvuru oluşturulduğunda
+
+Başarılı bir başvuru sonucunda yeni bir `Application` kaydı oluşturulur.
+
+Örneğin:
+
+```text
+POST /events/42/applications
+
+        ↓
+
+Application
+student = currentUser
+event = 42
+status = ACCEPTED / PENDING / WAITLISTED
+```
+
+Kesin request body yapısı daha sonra belirlenecektir.
 
 ---
 
@@ -78,7 +231,9 @@ Başvuru oluşturulduğunda `Application` kaydı oluşturulur.
 
 Giriş yapmış öğrencinin belirli bir etkinlikteki kendi başvurusunu ve başvuru durumunu getirir.
 
-Başvuru durumları:
+Öğrencinin kimliği endpoint içerisinde ayrıca belirtilmez. Backend giriş yapmış kullanıcı üzerinden ilgili `Application` kaydını bulur.
+
+Geçerli başvuru durumları:
 
 * `PENDING`
 * `ACCEPTED`
@@ -88,7 +243,24 @@ Başvuru durumları:
 
 Bu endpoint özellikle öğrencinin kendi başvurusunun ayrıntılı durumunu görüntülemesi için kullanılır.
 
-> Etkinlik listesi veya etkinlik detayında özet başvuru durumu gösterilebildiği için bu endpoint her listeleme işleminde kullanılmak zorunda değildir.
+Örneğin:
+
+```text
+Başvuru durumu: WAITLISTED
+```
+
+veya:
+
+```text
+Başvuru durumu: REJECTED
+Red nedeni: ...
+```
+
+gibi bilgiler bu endpoint üzerinden sağlanabilir.
+
+`REJECTED` ve `WITHDRAWN` kayıtlarının tutulmaya devam etmesi nedeniyle endpoint yalnızca aktif başvuruları değil, ilgili etkinlikteki mevcut/son başvuru kaydını da gösterebilir.
+
+> Etkinlik listesi veya etkinlik detayında özet başvuru durumu gösterilebildiği için bu endpoint her listeleme veya detay görüntüleme işleminde ayrı olarak çağrılmak zorunda değildir.
 
 ---
 
@@ -98,19 +270,83 @@ Bu endpoint özellikle öğrencinin kendi başvurusunun ayrıntılı durumunu g�
 
 Giriş yapmış öğrencinin kendi başvurusunu geri çekmesini sağlar.
 
-Başvuru kaydı silinmez. Başvurunun durumu `WITHDRAWN` olarak değiştirilir.
-
-Geçerli örnekler:
+Başvuru kaydı silinmez. Mevcut `Application` kaydının durumu:
 
 ```text
-PENDING → WITHDRAWN
-WAITLISTED → WITHDRAWN
-ACCEPTED → WITHDRAWN
+WITHDRAWN
 ```
 
-`ACCEPTED` durumundaki bir başvurunun geri çekilmesi kapasiteyi boşaltabilir ve ilgili bekleme listesindeki öğrencinin kabul edilmesini sağlayabilir.
+olarak değiştirilir.
 
-`WITHDRAWN` durumundaki eski kayıt korunur. Öğrenci başvuru dönemi hâlâ açıksa yeniden başvurabilir; bu durumda yeni bir `Application` kaydı oluşturulur.
+Öğrencinin geri çekebileceği durumlar:
+
+```text
+PENDING    → WITHDRAWN
+WAITLISTED → WITHDRAWN
+ACCEPTED   → WITHDRAWN
+```
+
+`REJECTED` durumundaki bir başvurunun geri çekilmesine gerek yoktur.
+
+`WITHDRAWN` durumundaki bir başvuru tekrar `ACCEPTED`, `PENDING` veya `WAITLISTED` durumuna döndürülmez.
+
+### ACCEPTED başvurunun geri çekilmesi
+
+Öğrenci `ACCEPTED` durumundaki başvurusunu geri çekerse kapasitede yer açılabilir.
+
+Örneğin:
+
+```text
+Kapasite: 50
+ACCEPTED: 50
+WAITLISTED: 5
+```
+
+Bir kabul edilmiş öğrenci başvurusunu geri çektiğinde:
+
+```text
+ACCEPTED
+    ↓
+WITHDRAWN
+```
+
+olur.
+
+Boşalan kapasite için sistem bekleme listesindeki ilk öğrenciyi otomatik olarak:
+
+```text
+WAITLISTED
+    ↓
+ACCEPTED
+```
+
+yapar.
+
+Öğrencinin hangi bekleme listesi kaydının kabul edileceğini bu endpoint kullanan öğrenci belirlemez.
+
+### Yeniden başvuru
+
+`WITHDRAWN` durumundaki eski `Application` kaydı korunur.
+
+Başvuru dönemi hâlâ açıksa öğrenci yeniden başvurabilir.
+
+Bu durumda eski kayıt tekrar kullanılmaz; yeni bir `Application` oluşturulur.
+
+Örneğin:
+
+```text
+Application #15
+ACCEPTED → WITHDRAWN
+
+        ↓ yeniden başvuru
+
+Application #21
+PENDING
+```
+
+Böylece geçmiş başvuru hareketleri korunur.
+
+Aynı anda öğrencinin aynı etkinlik için yalnızca bir aktif başvurusu bulunabilir.
 
 ---
 
@@ -121,12 +357,24 @@ ACCEPTED → WITHDRAWN
 Örneğin:
 
 ```text
-Android Workshop       → ATTENDED
-Yapay Zeka Semineri    → NOT_ATTENDED
-Kariyer Söyleşisi      → ATTENDED
+Android Workshop      → ATTENDED
+Yapay Zeka Semineri   → NOT_ATTENDED
+Kariyer Söyleşisi     → ATTENDED
 ```
 
-Bu işlem için şu aşamada ayrı bir `/history` veya `/my-events` endpointi oluşturulmamaktadır.
+Bu işlem için şu aşamada ayrı bir:
+
+```text
+GET /history
+```
+
+veya:
+
+```text
+GET /my-events
+```
+
+endpointi oluşturulmamaktadır.
 
 Mevcut:
 
@@ -140,6 +388,16 @@ Kesin filtre isimleri API contract aşamasında belirlenecektir.
 
 Geçmiş etkinliklerde öğrencinin katılım durumu `Attendance` verisinden elde edilir.
 
+Önemli olarak:
+
+```text
+Application = ACCEPTED
+```
+
+olması öğrencinin etkinliğe katıldığını göstermez.
+
+Katılım bilgisi ayrı `Attendance` kaydından belirlenir.
+
 ---
 
 ## 7. QR ile Katılım İşaretleme
@@ -148,31 +406,48 @@ Geçmiş etkinliklerde öğrencinin katılım durumu `Attendance` verisinden eld
 
 Öğrencinin etkinlik sırasında etkinliğe ait QR kodunu kendi telefonundaki QR okuyucu ile okutmasını sağlar.
 
-Attendance kayıtlarının oluşturulması etkinlik başladığında sistem tarafından otomatik olarak gerçekleştirilir.
+QR kodunun kendisinin request içerisinde nasıl taşınacağı ve doğrulama mekanizması henüz kesinleştirilmemiştir.
 
-Akış:
+Temel işlem şu şekildedir:
 
 ```text
-Etkinlik başlar
-       ↓
-ACCEPTED öğrenciler belirlenir
-       ↓
-Bu öğrenciler için Attendance kayıtları oluşturulur
-       ↓
-Attendance.status = NULL
+Öğrenci QR kodunu okutur
+        ↓
+POST /attendance/scan
+        ↓
+Backend giriş yapan öğrenciyi belirler
+        ↓
+QR/event doğrulanır
+        ↓
+Öğrencinin Attendance kaydı bulunur
+        ↓
+Attendance.status = ATTENDED
 ```
 
-Öğrenci etkinlik sırasında QR kodunu okuttuğunda:
+Öğrencinin kimliği request içerisinde manuel olarak gönderilmez.
+
+Backend kimliği doğrulanmış kullanıcı üzerinden öğrenciyi belirler.
+
+Attendance kayıtları etkinlik başladığında sistem tarafından oluşturulduğu için QR endpointinin temel görevi yeni bir katılım kaydı oluşturmak yerine mevcut kaydı:
 
 ```text
 NULL → ATTENDED
 ```
 
-olur.
+olarak güncellemektir.
 
-QR işlemi sırasında öğrencinin kimliği request içerisinden manuel olarak belirtilmez. Backend giriş yapan kullanıcıyı belirler ve ilgili öğrencinin Attendance kaydı üzerinde işlem yapar.
+QR'ın:
 
-QR'ın içeriğinin nasıl oluşturulacağı, ne kadar süre geçerli olacağı ve doğrulama mekanizmasının teknik ayrıntıları bu aşamada belirlenmemiştir.
+* İçeriğinin nasıl oluşturulacağı
+* Geçerlilik süresi
+* Tek kullanımlık olup olmayacağı
+* Yeniden oynatma/replay kontrolü
+* Etkinliğe özel doğrulama yöntemi
+* Fiziksel ve çevrim içi etkinliklerde nasıl kullanılacağı
+
+daha sonraki aşamalarda belirlenecektir.
+
+> Özellikle **ONLINE etkinliklerde QR ile katılımın nasıl uygulanacağı** henüz kesinleşmiş bir domain kararı değildir.
 
 ---
 
@@ -180,9 +455,13 @@ QR'ın içeriğinin nasıl oluşturulacağı, ne kadar süre geçerli olacağı 
 
 Aşağıdaki işlemler kullanıcı tarafından çağrılan API endpointleri değildir.
 
-### Etkinlik başladığında
+Bunlar sistemin etkinlik yaşam döngüsüne bağlı olarak gerçekleştirdiği otomatik işlemlerdir.
 
-Kabul edilmiş başvurular için Attendance kayıtları otomatik oluşturulur:
+### 8.1 Etkinlik başladığında
+
+Etkinlik başladığında `ACCEPTED` durumundaki başvurular belirlenir.
+
+Bu öğrenciler için `Attendance` kayıtları oluşturulur:
 
 ```text
 ACCEPTED Application
@@ -191,31 +470,229 @@ Attendance
 status = NULL
 ```
 
-`NULL` değeri, öğrencinin henüz katılımının belirlenmediğini ifade eder.
+`NULL`, öğrencinin henüz katılım durumunun belirlenmediğini ifade eder.
 
-Bunun temel amacı, etkinlik sırasında QR okutulduğunda başvuru kaydına ayrıca bakılmasına gerek kalmadan mevcut Attendance kaydının:
-
-```text
-NULL → ATTENDED
-```
-
-olarak güncellenebilmesidir.
-
-### Etkinlik bittikten sonra
-
-Katılımı `ATTENDED` olarak işaretlenmemiş ve hâlâ `NULL` olan Attendance kayıtları sistem tarafından:
+Örneğin:
 
 ```text
-NULL → NOT_ATTENDED
+Application.status = ACCEPTED
+Attendance.status = NULL
 ```
 
-olarak güncellenir.
+Bu iki durum birbirinden bağımsızdır.
+
+Öğrenci QR kodunu okuttuğunda:
+
+```text
+Attendance.NULL
+       ↓
+Attendance.ATTENDED
+```
+
+olur.
+
+Bu işlem için öğrencinin başvuru kaydının tekrar oluşturulması veya başvuru durumunun değiştirilmesi gerekmez.
+
+### 8.2 Etkinlik bittikten sonra
+
+Etkinlik sonunda hâlâ:
+
+```text
+Attendance.status = NULL
+```
+
+olan öğrencilerin katılım durumu sistem tarafından:
+
+```text
+NULL
+ ↓
+NOT_ATTENDED
+```
+
+olarak güncellenebilir.
 
 Bu işlem de kullanıcı tarafından çağrılan bir endpoint değildir.
 
+Bu otomatik işlemin tam olarak hangi anda çalıştırılacağı ve `event.start` / `event.end` ile nasıl ilişkilendirileceği daha sonraki teknik tasarım aşamasında kesinleştirilecektir.
+
 ---
 
-## 9. UC01 Endpoint Özeti
+## 9. Başvuru ve Kapasite Otomasyonları
+
+UC01 kapsamında bazı işlemler öğrencinin doğrudan çağırdığı endpointler değildir; ancak başvuru endpointlerinin sonucunu doğrudan etkiledikleri için burada belirtilir.
+
+### 9.1 Waitlist'ten otomatik kabul
+
+Kapasitesi bulunan bir etkinlikte kabul edilmiş bir başvuru kapasiteyi boşaltırsa sistem bekleme listesindeki ilk öğrenciyi otomatik olarak kabul eder.
+
+Örneğin:
+
+```text
+Kapasite: 50
+ACCEPTED: 50
+WAITLISTED: 3
+```
+
+Bir `ACCEPTED` başvuru `WITHDRAWN` olduğunda:
+
+```text
+ACCEPTED: 49
+WAITLISTED: 3
+```
+
+olur ve sistem:
+
+```text
+WAITLISTED #1
+      ↓
+ACCEPTED
+```
+
+yapar.
+
+Aynı otomasyon, kulüp yöneticisinin:
+
+```text
+ACCEPTED → REJECTED
+```
+
+şeklinde bir düzeltme yapması sonucunda kapasite açıldığında da uygulanır.
+
+### 9.2 Kapasitenin artırılması
+
+Etkinlik kapasitesi artırıldığında mevcut waitlist varsa sistem boşalan kapasite kadar öğrenciyi bekleme sırasına göre otomatik kabul eder.
+
+Örneğin:
+
+```text
+Kapasite: 50 → 70
+WAITLISTED: 20
+```
+
+ise ilk 20 öğrenci:
+
+```text
+WAITLISTED → ACCEPTED
+```
+
+olur.
+
+Ancak `APPROVAL_REQUIRED` etkinlikte henüz yöneticinin değerlendirmediği `PENDING` başvurular varsa ve henüz waitlist oluşturulmamışsa kapasite artışı bu başvuruları otomatik olarak `ACCEPTED` yapmaz.
+
+Bu öğrencilerin değerlendirilmesi kulüp yöneticisinin başvuru yönetimi işlemleri kapsamında yapılır.
+
+---
+
+## 10. Başvuru Dönemi ve Endpoint Davranışı
+
+Başvuru endpointlerinin kullanılabilirliği etkinliğin başvuru tarihleriyle sınırlıdır.
+
+Başvuru genel olarak:
+
+```text
+applicationStart ≤ currentTime < applicationEnd
+```
+
+aralığında yapılabilir.
+
+Başvuru dönemi başlamadan önce:
+
+```text
+POST /events/{eventId}/applications
+```
+
+kullanılamaz.
+
+Başvuru dönemi sona erdikten sonra yeni `Application` oluşturulamaz.
+
+Etkinlik başladıktan sonra da yeni başvuru oluşturulamaz.
+
+Dolayısıyla:
+
+```text
+Başvuru dönemi açık
+        ↓
+Yeni başvuru yapılabilir
+```
+
+ancak:
+
+```text
+Başvuru dönemi kapandı
+        ↓
+Yeni başvuru yapılamaz
+```
+
+ve:
+
+```text
+Etkinlik başladı
+        ↓
+Yeni başvuru yapılamaz
+```
+
+şeklinde davranır.
+
+### Başvuru dönemi kapandıktan sonra mevcut başvurular
+
+Başvuru dönemi kapandıktan sonra yeni başvuru alınmaz; ancak `APPROVAL_REQUIRED` etkinliklerde mevcut `PENDING` başvuruların kulüp yöneticisi tarafından değerlendirilmesi devam edebilir.
+
+Bu nedenle:
+
+```text
+applicationEnd
+      ↓
+Yeni Application ❌
+      ↓
+Mevcut PENDING başvuruların yönetimi ✅
+```
+
+şeklinde bir ayrım bulunur.
+
+`PENDING` başvuruların başvuru dönemi kapandıktan sonra sistem tarafından otomatik olarak mı `REJECTED` yapılacağı, yoksa yöneticinin tamamını manuel olarak mı sonuçlandıracağı henüz kesinleştirilmemiştir. Bu karar UC03/API contract aşamasında netleştirilecektir.
+
+`PUBLIC` etkinliklerde ise yeni başvurular zaten doğrudan `ACCEPTED` veya `WAITLISTED` olduğundan normal koşullarda değerlendirilecek bir `PENDING` başvuru bulunmaz.
+
+---
+
+## 11. Etkinlik Başladıktan Sonra
+
+Etkinlik başladıktan sonra `Application` üzerinde yeni başvuru işlemleri ve başvuru durumu değişiklikleri yapılamaz.
+
+Bu nedenle:
+
+```text
+PENDING → ACCEPTED        ❌
+PENDING → REJECTED        ❌
+PENDING → WAITLISTED      ❌
+REJECTED → ACCEPTED       ❌
+ACCEPTED → REJECTED       ❌
+ACCEPTED → WITHDRAWN      ❌
+PENDING → WITHDRAWN       ❌
+WAITLISTED → WITHDRAWN    ❌
+```
+
+olur.
+
+Etkinlik başladıktan sonra süreç `Attendance` üzerinden devam eder.
+
+Örneğin:
+
+```text
+Event başladı
+     ↓
+ACCEPTED öğrenciler
+     ↓
+Attendance oluşturulur
+     ↓
+QR ile ATTENDED
+```
+
+Bu nedenle Application yaşam döngüsü ile Attendance yaşam döngüsü birbirinden ayrı tutulur.
+
+---
+
+## 12. UC01 Endpoint Özeti
 
 | İşlem                           | HTTP Method | Endpoint                                 |
 | ------------------------------- | ----------- | ---------------------------------------- |
@@ -229,5 +706,29 @@ Bu işlem de kullanıcı tarafından çağrılan bir endpoint değildir.
 
 ### UC01 kapsamında endpoint olmayan otomatik işlemler
 
-* Etkinlik başlangıcında `ACCEPTED → Attendance(NULL)`
-* Etkinlik bitiminde `NULL → NOT_ATTENDED`
+* Etkinlik başlangıcında `ACCEPTED Application → Attendance(NULL)`
+* QR okutulduğunda `Attendance NULL → ATTENDED` işleminin backend tarafından gerçekleştirilmesi
+* Etkinlik sonunda `Attendance NULL → NOT_ATTENDED`
+* Kapasite açıldığında ilk `WAITLISTED → ACCEPTED`
+* Kapasite artırıldığında mevcut waitlist'in otomatik işlenmesi
+
+---
+
+## 13. UC01 ile İlgili Açık API Kararları
+
+Aşağıdaki konular endpointlerin temel amacını değiştirmediği için bu aşamada açık bırakılmıştır:
+
+* `GET /events` için kesin filtre parametreleri
+* Listeleme ve detay response'larında `Application` / `Attendance` bilgilerinin tam olarak hangi formatta gösterileceği
+* Pagination yapısı
+* Başvuru oluşturma/withdraw işlemlerinin kesin HTTP status code'ları
+* Hata response formatı
+* `POST /attendance/scan` request body ve QR veri formatı
+* QR kodunun geçerlilik süresi ve güvenlik mekanizması
+* ONLINE etkinliklerde QR katılımının uygulanıp uygulanmayacağı
+* Etkinlik sonunda `NULL → NOT_ATTENDED` işleminin tam olarak ne zaman çalıştırılacağı
+* Başvuru sonrasında kalan `PENDING` kayıtlarının deadline sonrası otomatik mi yoksa manuel mi sonuçlandırılacağı
+* `REJECTED` durumunda gösterilecek rejection reason'ın response modeli
+* Öğrencinin başvuru geçmişinin API'de ne kadar ayrıntılı gösterileceği
+
+Bu kararlar netleştiğinde endpointlerin path yapısının değiştirilmesi gerekmeyebilir; çoğunlukla request/response contract ve iş kuralı detayları üzerinde etkili olacaktır.

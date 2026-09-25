@@ -16,6 +16,7 @@ Bu akış kapsamında:
 * Etkinlik iptali
 * Etkinliğin belirli koşullarda silinebilmesi
 * İptal edilen etkinliklerin geçmişte korunması
+* Etkinliği oluşturan yöneticinin kaydedilmesi
 
 kuralları ele alınır.
 
@@ -43,6 +44,8 @@ Aşağıdaki kullanıcılar etkinlik oluşturamaz:
 
 Global admin normal kulüp etkinliklerini oluşturmaz.
 
+Global admin'in kulüp yönetimi üzerindeki yetkileri bu use case'in kapsamı dışındadır.
+
 ---
 
 # 3. Ön Koşullar
@@ -52,7 +55,9 @@ Etkinlik oluşturabilmek için:
 * Kulüp sistem tarafından onaylanmış olmalıdır.
 * Kulüp aktif durumda olmalıdır.
 * İşlemi yapan kullanıcı ilgili kulübün yetkili yöneticisi olmalıdır.
-* Kullanıcının etkinlik oluşturma yetkisi bulunmalıdır.
+* Kullanıcının etkinlik oluşturma ve yönetme yetkisi bulunmalıdır.
+
+Etkinlik oluşturma işlemi sırasında ilgili kulübün aktif yöneticilik ilişkisi sistem tarafından kontrol edilir.
 
 ---
 
@@ -64,19 +69,33 @@ Yönetici gerekli bilgileri doldurup etkinliği oluşturduğunda etkinlik doğru
 
 ```text
 Etkinlik bilgileri girilir
-
         ↓
-
 Etkinlik oluşturulur
-
         ↓
-
-Etkinlik yayınlanır
+Event kaydı PUBLISHED durumunda oluşturulur
 ```
 
 Etkinlik oluşturulduktan sonra ayrıca global admin onayı beklenmez.
 
 Etkinlik oluşturulduğu anda sistemde `PUBLISHED` durumunda bir Event kaydı oluşur.
+
+Bu nedenle sistemde kalıcı bir:
+
+```text
+DRAFT
+```
+
+veya
+
+```text
+CREATED
+```
+
+Event status'u bulunmaz.
+
+`CREATED` ifadesi yalnızca oluşturma işleminin bir aşaması olarak düşünülebilir; veritabanında kalıcı Event status olarak tutulmaz.
+
+Yönetici etkinliği oluşturduktan sonra gerekli düzenlemeleri etkinlik başlamadan önce yapabilir.
 
 ---
 
@@ -98,7 +117,22 @@ Etkinlik oluşturulurken aşağıdaki bilgiler belirlenir:
 
 Sistem ayrıca etkinliği oluşturan yöneticiyi kaydeder.
 
-Bu bilgi öğrencilere gösterilmek zorunda değildir ancak sistemde geçmiş ve denetim amacıyla tutulur.
+Örneğin:
+
+```text
+createdBy = User
+```
+
+Bu bilgi öğrencilere gösterilmek zorunda değildir.
+
+Sistem içerisinde:
+
+* Denetim
+* Geçmiş
+* Yönetim kayıtları
+* İleride oluşturulabilecek raporlar
+
+amacıyla tutulabilir.
 
 ---
 
@@ -122,6 +156,8 @@ Fiziksel etkinliklerde etkinliğin gerçekleştirileceği konum belirtilir.
 * Derslik
 * Kampüs alanı
 
+gibi bilgiler kullanılabilir.
+
 ## 6.2. Online Etkinlik
 
 Online etkinliklerde etkinliğe katılım için bağlantı bilgisi bulunur.
@@ -137,6 +173,8 @@ Online etkinlik türü ayrıca platformlara bölünmez.
 
 aynı `ONLINE` etkinlik türü içerisinde değerlendirilebilir.
 
+Online platformun ayrıca bir enum olarak tutulması bu use case kapsamında zorunlu değildir.
+
 ---
 
 # 7. Etkinlik Türünün Değiştirilmesi
@@ -144,12 +182,14 @@ aynı `ONLINE` etkinlik türü içerisinde değerlendirilebilir.
 Etkinlik yayınlandıktan sonra etkinlik türü değiştirilemez.
 
 ```text
-PHYSICAL → ONLINE    ❌
+PHYSICAL → ONLINE     ❌
 
-ONLINE → PHYSICAL    ❌
+ONLINE → PHYSICAL     ❌
 ```
 
-Ancak etkinliğin türüne ait bilgiler değiştirilebilir.
+Bu kural etkinlik başlamadan önce de geçerlidir.
+
+Ancak etkinliğin türüne ait erişim bilgileri değiştirilebilir.
 
 ### Fiziksel etkinlik
 
@@ -163,6 +203,10 @@ Konum → değiştirilebilir
 Online bağlantı → değiştirilebilir
 ```
 
+Dolayısıyla yöneticinin fiziksel etkinliği farklı bir salona taşıması mümkündür; ancak etkinliği fizikselden online'a dönüştürmesi mümkün değildir.
+
+Aynı şekilde online etkinliğin bağlantısı değiştirilebilir ancak etkinlik türü fiziksel olarak değiştirilemez.
+
 ---
 
 # 8. Başvuru Tipi
@@ -173,62 +217,78 @@ Etkinlik oluşturulurken başvuru tipi belirlenir.
 
 ```text
 PUBLIC
-PRIVATE
+APPROVAL_REQUIRED
 ```
 
-## 8.1. Herkese Açık
+## 8.1. PUBLIC
 
 `PUBLIC` etkinliklerde öğrencinin başvurusu yönetici onayı gerektirmez.
 
-Kapasite belirtilmemişse veya kapasite henüz dolmamışsa başvuru otomatik olarak kabul edilir.
+Kapasite belirtilmemişse veya kapasite henüz dolmamışsa başvuru doğrudan `ACCEPTED` olur.
 
 ```text
 Başvuru
-
    ↓
-
-PENDING
-
-   ↓
-
 ACCEPTED
 ```
 
-Kapasite dolduktan sonra yeni başvurular bekleme listesine alınır:
+Kapasite dolduğunda yeni başvurular doğrudan `WAITLISTED` durumuna alınır.
 
 ```text
 Başvuru
-
    ↓
-
-PENDING
-
-   ↓
-
 WAITLISTED
 ```
 
-Bekleme listesindeki öğrenciler başvuru zamanına göre sıralanır.
+PUBLIC başvurularında `PENDING` kalıcı bir Application status olarak kullanılmaz.
 
-Kapasite açıldığında bekleme listesindeki ilk öğrenci otomatik olarak `ACCEPTED` durumuna geçirilir.
-
-## 8.2. Özel Etkinlik
-
-`PRIVATE` etkinliklerde öğrencinin başvurusu yönetici tarafından değerlendirilir.
-
-Kapasite bulunup bulunmamasından bağımsız olarak, başvuru süresi devam ederken başvuru:
+Dolayısıyla aşağıdaki akış sistemde gerçek bir status geçişi olarak bulunmaz:
 
 ```text
 Başvuru
-
    ↓
+PENDING
+   ↓
+ACCEPTED
+```
 
+veya:
+
+```text
+Başvuru
+   ↓
+PENDING
+   ↓
+WAITLISTED
+```
+
+Sistem uygun durumda doğrudan `ACCEPTED` veya `WAITLISTED` kaydı oluşturur.
+
+Bekleme listesindeki öğrenciler başvuru zamanına göre sıralanır.
+
+Kapasite açıldığında bekleme listesindeki ilk uygun öğrenci sistem tarafından otomatik olarak `ACCEPTED` durumuna geçirilir.
+
+Yönetici bu otomatik sıralamayı manuel olarak değiştirmez.
+
+## 8.2. APPROVAL_REQUIRED
+
+`APPROVAL_REQUIRED` etkinliklerde öğrencinin başvurusu yönetici tarafından değerlendirilir.
+
+Kapasite bulunup bulunmamasından bağımsız olarak, başvuru süresi devam ederken yeni başvuru:
+
+```text
+Başvuru
+   ↓
 PENDING
 ```
 
 durumuna geçer.
 
-Kapasite bulunmayan PRIVATE etkinliklerde yönetici başvuruları:
+Kapasitenin dolmuş olması yeni `PENDING` başvuruların alınmasını engellemez.
+
+Başvuru süresi sona erdikten sonra mevcut `PENDING` başvurular yönetici tarafından değerlendirilir.
+
+Kapasitesi bulunmayan `APPROVAL_REQUIRED` etkinliklerde yönetici başvuruları:
 
 ```text
 PENDING
@@ -236,9 +296,9 @@ PENDING
    └──→ REJECTED
 ```
 
-şeklinde sonuçlandırır.
+şeklinde sonuçlandırabilir.
 
-Kapasitesi bulunan PRIVATE etkinliklerde ise yönetici değerlendirme sonucunda başvuruları:
+Kapasitesi bulunan `APPROVAL_REQUIRED` etkinliklerde ise değerlendirme sonucunda:
 
 ```text
 PENDING
@@ -247,9 +307,15 @@ PENDING
    └──→ REJECTED
 ```
 
-şeklinde sonuçlandırabilir.
+durumları kullanılabilir.
 
-`WAITLISTED`, yöneticinin uygun gördüğü yedek adayları ifade eder.
+`WAITLISTED`, kapasite nedeniyle o anda kabul edilemeyen ancak yedek olarak tutulmak istenen başvuruları ifade eder.
+
+`WAITLISTED` öğrenciler başvuru zamanına göre sıralanır.
+
+Kapasite açıldığında ilk sıradaki bekleme listesi adayı sistem tarafından otomatik olarak `ACCEPTED` durumuna geçirilir.
+
+Bu noktada yöneticinin ayrıca "bekleme listesinden kimi kabul edeceğim" şeklinde manuel seçim yapması gerekmez.
 
 ---
 
@@ -266,20 +332,22 @@ Başvuru başladı   → değiştirilemez
 Örneğin:
 
 ```text
-PUBLIC → PRIVATE    ✅ Başvuru başlamadıysa
+PUBLIC → APPROVAL_REQUIRED     ✅ Başvuru başlamadıysa
 
-PRIVATE → PUBLIC    ✅ Başvuru başlamadıysa
+APPROVAL_REQUIRED → PUBLIC     ✅ Başvuru başlamadıysa
 ```
 
 Başvuru başlangıç tarihi geçtikten sonra başvuru tipi değiştirilemez.
 
 ```text
-PUBLIC → PRIVATE    ❌
+PUBLIC → APPROVAL_REQUIRED     ❌
 
-PRIVATE → PUBLIC    ❌
+APPROVAL_REQUIRED → PUBLIC     ❌
 ```
 
 Bu kuralın amacı, başvuru süreci başladıktan sonra öğrencilerin karşılaştığı başvuru davranışının değiştirilmemesidir.
+
+Örneğin PUBLIC olarak başvurusu alınmaya başlanmış bir etkinliğin başvuru süreci başladıktan sonra `APPROVAL_REQUIRED` yapılması, daha önce otomatik kabul edilen ve yeni başvuran öğrenciler açısından farklı kurallar oluşturacağından izin verilmez.
 
 ---
 
@@ -289,19 +357,37 @@ Etkinlik oluşturulurken kapasite belirtilmesi isteğe bağlıdır.
 
 Kapasite belirtilmezse etkinliğin kapasite sınırı bulunmaz.
 
+```text
+capacity = null
+```
+
+durumu sınırsız kapasite olarak değerlendirilir.
+
 Kapasite belirtilmişse başvurular etkinliğin başvuru tipine göre kapasiteyle birlikte değerlendirilir.
 
 ### PUBLIC etkinliklerde
 
-Kapasite dolana kadar uygun başvurular otomatik olarak kabul edilir.
+Kapasite dolana kadar başvurular otomatik olarak kabul edilir.
 
-Kapasite dolduktan sonra yeni başvurular `WAITLISTED` durumuna geçer.
+Kapasite dolduktan sonra yeni başvurular:
 
-### PRIVATE etkinliklerde
+```text
+WAITLISTED
+```
+
+durumuna alınır.
+
+### APPROVAL_REQUIRED etkinliklerde
 
 Kapasitenin dolmuş olması başvuru süresi devam ederken yeni başvuruları engellemez.
 
-Başvurular `PENDING` durumunda kalır.
+Başvurular:
+
+```text
+PENDING
+```
+
+durumunda kalır.
 
 Başvuru süresi sona erdikten sonra yönetici kapasiteyi dikkate alarak:
 
@@ -311,9 +397,9 @@ Başvuru süresi sona erdikten sonra yönetici kapasiteyi dikkate alarak:
 
 durumlarını belirler.
 
-Kapasitesi bulunmayan PRIVATE etkinliklerde `WAITLISTED` kullanılmaz.
+Kapasitesi bulunmayan `APPROVAL_REQUIRED` etkinliklerde `WAITLISTED` kullanılmaz.
 
-Bu kurallar Use Case 01 ve Use Case 03 kapsamında ayrıntılandırılmıştır.
+Bu kurallar öğrencinin başvurması ve katılması ile ilgili ayrıntılar açısından Use Case 01'de, yöneticinin başvuruları sonuçlandırması açısından ise Use Case 03'te ayrıca ele alınır.
 
 ---
 
@@ -326,26 +412,51 @@ Kapasite değişikliği başvuru başlangıç tarihine göre farklı kurallara t
 Başvuru süreci henüz başlamamışsa kapasite hem artırılabilir hem azaltılabilir.
 
 ```text
-50 → 40    ✅
+50 → 40     ✅
 
-50 → 70    ✅
+50 → 70     ✅
 ```
+
+Kapasite azaltılırken mevcut `ACCEPTED` sayısının altına inilmemelidir.
+
+Örneğin:
+
+```text
+Kapasite: 50
+ACCEPTED: 45
+```
+
+durumunda kapasitenin:
+
+```text
+50 → 45
+```
+
+şeklinde azaltılması mümkündür.
+
+Ancak:
+
+```text
+50 → 40
+```
+
+şeklinde azaltılması mevcut kabul edilmiş başvuruların kapasitenin üzerinde kalmasına neden olacağından mümkün değildir.
 
 ## 11.2. Başvuru Süreci Başladıktan Sonra
 
 Başvuru başlangıç tarihi geçtikten sonra kapasite yalnızca artırılabilir.
 
 ```text
-50 → 70    ✅
+50 → 70     ✅
 
-50 → 40    ❌
+50 → 40     ❌
 ```
 
 Bu kural doğrudan **başvuru başlangıç tarihine** bağlıdır.
 
 Etkinliğe herhangi bir başvuru yapılmış olup olmaması bu kuralı değiştirmez.
 
-Kapasite artırıldığında mevcut bekleme listesi de ilgili kurallara göre işlenir.
+Kapasite artırıldığında mevcut bekleme listesi ilgili kurallara göre otomatik olarak işlenir.
 
 Örneğin:
 
@@ -353,13 +464,14 @@ Kapasite artırıldığında mevcut bekleme listesi de ilgili kurallara göre i�
 Kapasite: 50
 
 ACCEPTED: 50
-
 WAITLISTED: 10
 
 Kapasite → 55
 ```
 
-olduğunda açılan 5 kontenjan, bekleme listesindeki ilk 5 adayın kabul edilmesi için kullanılır.
+olduğunda açılan 5 kontenjan, bekleme listesindeki ilk 5 adayın `ACCEPTED` durumuna geçirilmesi için kullanılır.
+
+Bu işlem sistem tarafından otomatik gerçekleştirilir.
 
 ---
 
@@ -373,7 +485,6 @@ Başvuru başlangıç tarihi henüz gelmemişse yönetici bu tarihi değiştireb
 
 ```text
 Başvuru başlangıcı: 01 Ekim
-
 Bugün: 25 Eylül
 ```
 
@@ -386,6 +497,8 @@ Başvuru başlamadı → değiştirilebilir
 
 Başvuru başladı   → değiştirilemez
 ```
+
+Bu kural başvuru sürecinin başlangıcından sonra öğrencilerin karşılaştığı zaman aralığının geriye dönük olarak değiştirilmesini önler.
 
 ---
 
@@ -405,7 +518,11 @@ Bu özellikle başvuru süresinin uzatılabilmesini sağlar.
 
 Başvuru süresi sona erdikten sonra mevcut başvurular yönetilmeye devam edebilir.
 
-Özellikle PRIVATE etkinliklerde başvuru süresinin sona ermesinden sonra `PENDING` başvurular yönetici tarafından sonuçlandırılabilir.
+Özellikle `APPROVAL_REQUIRED` etkinliklerde başvuru süresinin sona ermesinden sonra `PENDING` başvuruların yönetici tarafından sonuçlandırılması mümkündür.
+
+Başvuru bitiş tarihi etkinlik başlangıcından sonra olamaz.
+
+Başvuru bitişinin etkinlik başlangıcına bağlanması nedeniyle etkinlik başladıktan sonra başvuru sürecine ilişkin herhangi bir düzenleme yapılamaz.
 
 ---
 
@@ -421,6 +538,18 @@ Bitiş tarihi/saati     → değiştirilebilir
 
 Etkinlik başladıktan sonra bu alanların değiştirilmesi mümkün değildir.
 
+Etkinlik tarihleri değiştirilirken başvuru tarihleriyle olan zaman ilişkilerinin de korunması gerekir.
+
+Örneğin:
+
+```text
+Başvuru başlangıcı < Başvuru bitişi ≤ Etkinlik başlangıcı
+```
+
+mantığı bozulacak bir tarih değişikliğine izin verilmemelidir.
+
+Başlangıç tarihi değiştirildiğinde mevcut başvuru kurallarının geçerliliği ayrıca sistem tarafından korunmalıdır.
+
 ---
 
 # 15. Etkinlik Adı
@@ -431,7 +560,9 @@ Etkinlik adı yayınlandıktan sonra değiştirilemez.
 Etkinlik adı → ❌
 ```
 
-Bunun amacı etkinlik yayınlandıktan sonra öğrencilerin gördüğü etkinliğin kimliğinin değiştirilmemesidir.
+Bu kural etkinlik yayınlandıktan sonra öğrencilerin gördüğü etkinliğin temel kimliğinin değiştirilmemesini sağlar.
+
+Yönetici isimde hata fark ederse, yayınlandıktan sonra mevcut etkinliğin adını değiştirmek yerine yeni etkinlik oluşturma veya uygun yönetim sürecini kullanmalıdır.
 
 ---
 
@@ -443,7 +574,13 @@ Etkinlik başlamamışsa açıklama düzenlenebilir.
 Açıklama → ✅
 ```
 
-Yönetici etkinlik hakkında ek bilgi verebilir veya mevcut açıklamayı güncelleyebilir.
+Yönetici:
+
+* Etkinlik hakkında ek bilgi verebilir.
+* Mevcut açıklamayı güncelleyebilir.
+* Öğrencilere açıklayıcı yeni bilgiler ekleyebilir.
+
+Etkinlik başladıktan sonra açıklama düzenlenemez.
 
 ---
 
@@ -454,6 +591,10 @@ Etkinlik başlamamışsa etkinliğin görseli değiştirilebilir.
 ```text
 Görsel → ✅
 ```
+
+Bu sayede yönetici etkinliğin görselini güncelleyebilir veya yanlış yüklenen görseli düzeltebilir.
+
+Etkinlik başladıktan sonra görsel değiştirilemez.
 
 ---
 
@@ -467,19 +608,29 @@ Etkinlik başlamamışsa etkinliğin erişim bilgileri değiştirilebilir.
 Konum → değiştirilebilir
 ```
 
+Örneğin etkinliğin salonu veya dersliği değiştirilebilir.
+
 ### Online etkinlik
 
 ```text
 Online bağlantı → değiştirilebilir
 ```
 
+Örneğin etkinliğin Meet veya başka bir platformdaki bağlantısı güncellenebilir.
+
 Ancak etkinliğin türü değiştirilemez.
+
+```text
+PHYSICAL → ONLINE     ❌
+
+ONLINE → PHYSICAL     ❌
+```
 
 ---
 
 # 19. Etkinlik Düzenleme Özeti
 
-Etkinlik henüz başlamamışsa:
+Etkinlik henüz başlamamışsa temel düzenleme kuralları aşağıdaki gibidir:
 
 | Alan                     | Düzenlenebilir                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -494,7 +645,7 @@ Etkinlik henüz başlamamışsa:
 | Başvuru tipi             | ✅ Başvuru başlamadıysa                                                                                    |
 | Kapasite                 | ✅ Başvuru başlamadıysa artırılabilir veya azaltılabilir; başvuru başladıktan sonra yalnızca artırılabilir |
 | Başvuru başlangıç tarihi | ✅ Başvuru başlamadıysa                                                                                    |
-| Başvuru bitiş tarihi     | ✅                                                                                                         |
+| Başvuru bitiş tarihi     | ✅ Etkinlik başlamadıysa                                                                                   |
 
 Etkinlik başladıktan sonra etkinliğin düzenlenmesine ilişkin bu değişiklikler yapılamaz.
 
@@ -504,6 +655,8 @@ Başvuru süreci başladıktan sonra ayrıca aşağıdaki kurallar geçerlidir:
 * Kapasite azaltılamaz.
 * Başvuru başlangıç tarihi değiştirilemez.
 * Başvuru bitiş tarihi, etkinlik başlamamış olmak koşuluyla değiştirilebilir.
+* Etkinlik türü hiçbir zaman değiştirilemez.
+* Etkinlik adı hiçbir zaman değiştirilemez.
 
 ---
 
@@ -521,7 +674,21 @@ durumuna geçer.
 
 İptal işlemi, başvuru sürecinin başlayıp başlamadığına bakılmaksızın etkinlik başlamadan önce gerçekleştirilebilir.
 
-Ancak başvuru süreci başladıktan sonra etkinliğin fiziksel olarak silinmesine izin verilmez. Bu durumda etkinlik iptal edilecekse `CANCELLED` durumuna geçirilir.
+```text
+PUBLISHED → CANCELLED
+```
+
+Etkinlik başladıktan sonra etkinlik iptal edilemez; bu durumda etkinlik yaşam döngüsü farklı bir duruma geçer ve tamamlanmış etkinlik olarak değerlendirilir.
+
+Başvuru süreci başladıktan sonra etkinliğin fiziksel olarak silinmesine izin verilmez.
+
+Bu durumda etkinlik iptal edilecekse:
+
+```text
+PUBLISHED → CANCELLED
+```
+
+durumu kullanılır.
 
 ---
 
@@ -531,17 +698,40 @@ Ancak başvuru süreci başladıktan sonra etkinliğin fiziksel olarak silinmesi
 
 Mevcut başvuru kayıtları korunur.
 
+Örneğin etkinlik iptal edilmeden önce:
+
+```text
+ACCEPTED
+WAITLISTED
+REJECTED
+WITHDRAWN
+```
+
+durumlarında bulunan Application kayıtları silinmez.
+
+Etkinlik `CANCELLED` olduğu için öğrenciler artık bu etkinlik için yeni başvuru oluşturamaz.
+
 ---
 
 # 20.2. İptal Edilen Etkinlikte QR
 
 İptal edilen etkinliğin QR kodu ile katılım alınamaz.
 
+Etkinlik iptal edildiği için:
+
+```text
+QR → Attendance
+```
+
+işlemi gerçekleştirilemez.
+
+Etkinlik başlamadan önce iptal edildiğinden normal akışta henüz Attendance kayıtları oluşturulmamış olur.
+
 ---
 
 # 20.3. İptal Edilen Etkinlikte Kayıtlar
 
-Etkinlik iptal edildiğinde mevcut Application kayıtları silinmez.
+Etkinlik iptal edildiğinde mevcut `Application` kayıtları silinmez.
 
 Örneğin:
 
@@ -549,16 +739,21 @@ Etkinlik iptal edildiğinde mevcut Application kayıtları silinmez.
 * Kabul kayıtları
 * Ret kayıtları
 * Bekleme listeleri
+* Geri çekilmiş başvurular
 
 korunur.
 
-`Application` için ayrıca `CANCELLED` durumu oluşturulmaz.
+`Application` için ayrıca:
+
+```text
+CANCELLED
+```
+
+durumu oluşturulmaz.
 
 Etkinlik `CANCELLED` durumunda olduğu için kullanıcı arayüzünde etkinliğin iptal edildiği açıkça gösterilebilir.
 
-Etkinlik başlamadan önce iptal edildiğinden henüz Attendance kayıtları oluşturulmamış olur.
-
-Bu nedenle iptal edilen etkinlik için yeni Attendance kaydı oluşturulmaz.
+Etkinlik başlamadan önce iptal edildiğinden henüz normal katılım süreci başlamamış olur.
 
 Etkinlik geçmişte görüntülenebilir ve iptal edildiği açıkça belirtilir.
 
@@ -591,7 +786,7 @@ Bu durum özellikle:
 
 * Yanlış oluşturulan
 * Önemli bir bilgi hatası bulunan
-* Henüz kullanıcıların başvuru yapmadığı
+* Henüz kullanıcıların başvurmadığı
 * Başvuru süreci başlamadan vazgeçilen
 
 etkinliklerin sistemden kaldırılabilmesini sağlar.
@@ -631,21 +826,27 @@ Bu bilgi:
 
 için kullanılabilir.
 
+Etkinliği oluşturan yöneticinin daha sonra kulüp yöneticiliğinden ayrılması, `createdBy` bilgisinin değiştirilmesini gerektirmez.
+
+Bu alan etkinliğin oluşturulduğu andaki yönetici bilgisini temsil eder.
+
 Öğrencinin etkinlik ekranında gösterilmesi zorunlu değildir.
 
 ---
 
 # 23. Yetki Özeti
 
-| İşlem               |                                Başkan |                     Başkan Yardımcısı |                              Yönetici | Normal Öğrenci |
-| ------------------- | ------------------------------------: | ------------------------------------: | ------------------------------------: | -------------: |
-| Etkinlik oluşturma  |                                     ✅ |                                     ✅ |                                     ✅ |              ❌ |
-| Etkinliği yayınlama |                                     ✅ |                                     ✅ |                                     ✅ |              ❌ |
-| Etkinlik düzenleme  |                                     ✅ |                                     ✅ |                                     ✅ |              ❌ |
-| Kapasite artırma    |                                     ✅ |                                     ✅ |                                     ✅ |              ❌ |
-| Kapasite azaltma    |             ✅ Başvuru başlamadan önce |             ✅ Başvuru başlamadan önce |             ✅ Başvuru başlamadan önce |              ❌ |
-| Etkinlik iptali     |                                     ✅ |                                     ✅ |                                     ✅ |              ❌ |
-| Etkinlik silme      | ✅ Başvuru başlamadan ve başvuru yoksa | ✅ Başvuru başlamadan ve başvuru yoksa | ✅ Başvuru başlamadan ve başvuru yoksa |              ❌ |
+| İşlem               |                 Başkan                |           Başkan Yardımcısı           |                Yönetici               | Normal Öğrenci |
+| ------------------- | :-----------------------------------: | :-----------------------------------: | :-----------------------------------: | :------------: |
+| Etkinlik oluşturma  |                   ✅                   |                   ✅                   |                   ✅                   |        ❌       |
+| Etkinliği yayınlama |                   ✅                   |                   ✅                   |                   ✅                   |        ❌       |
+| Etkinlik düzenleme  |                   ✅                   |                   ✅                   |                   ✅                   |        ❌       |
+| Kapasite artırma    |                   ✅                   |                   ✅                   |                   ✅                   |        ❌       |
+| Kapasite azaltma    |       ✅ Başvuru başlamadan önce       |       ✅ Başvuru başlamadan önce       |       ✅ Başvuru başlamadan önce       |        ❌       |
+| Etkinlik iptali     |                   ✅                   |                   ✅                   |                   ✅                   |        ❌       |
+| Etkinlik silme      | ✅ Başvuru başlamadan ve başvuru yoksa | ✅ Başvuru başlamadan ve başvuru yoksa | ✅ Başvuru başlamadan ve başvuru yoksa |        ❌       |
+
+Bu yetkiler yalnızca ilgili kulüp üzerindeki yöneticilik ilişkisi devam ettiği sürece geçerlidir.
 
 ---
 
@@ -653,11 +854,9 @@ için kullanılabilir.
 
 Etkinlik oluşturulduğunda doğrudan yayınlanır.
 
-Temel yaşam döngüsü:
+Kalıcı Event status yaşam döngüsü:
 
 ```text
-CREATED
-   ↓
 PUBLISHED
    │
    ├────────────→ CANCELLED
@@ -668,11 +867,19 @@ COMPLETED
 
 `DRAFT` durumu bulunmaz.
 
-Etkinlik oluşturma ve yayınlama tek işlem olduğundan yöneticinin ayrıca "Taslak olarak kaydet" işlemi yapmasına gerek yoktur.
+`CREATED` durumu da kalıcı Event status olarak bulunmaz.
+
+Etkinlik oluşturma işlemi başarılı olduğunda Event doğrudan:
+
+```text
+PUBLISHED
+```
+
+durumunda oluşturulur.
 
 ### Silme durumu
 
-Başvuru başlangıç tarihi henüz gelmemişse:
+Başvuru başlangıç tarihi henüz gelmemişse ve hiç başvuru alınmamışsa:
 
 ```text
 PUBLISHED
@@ -684,7 +891,9 @@ işlemi gerçekleştirilebilir.
 
 Bu durumda Event kaydı fiziksel olarak kaldırılır ve `CANCELLED` durumuna geçirilmez.
 
-Başvuru süreci başladıktan sonra:
+Başvuru başlangıç tarihi geldikten sonra veya herhangi bir başvuru alındıktan sonra fiziksel silme kullanılamaz.
+
+Bu durumda etkinlikten vazgeçilmesi gerekiyorsa:
 
 ```text
 PUBLISHED
@@ -694,25 +903,103 @@ CANCELLED
 
 kullanılır.
 
+Etkinliğin zamanı geldiğinde normal akış sonunda:
+
+```text
+PUBLISHED
+   ↓
+COMPLETED
+```
+
+durumuna geçmesi beklenir.
+
+`COMPLETED` durumuna geçişin tam olarak sistem tarafından hangi anda yapılacağı ayrıca teknik tasarım aşamasında belirlenebilir.
+
 ---
 
 # 25. Karar Verilmemiş Konular
 
 Bu use case kapsamında şu anda bilinçli olarak açık bırakılan konular:
 
-### 25.1. Başvuru başlangıç tarihinin sınırları
+## 25.1. Başvuru başlangıç tarihinin sınırları
 
 Başvuru başlangıç tarihinin etkinlik başlangıç tarihine ne kadar yakın olabileceği henüz ayrıca belirlenmemiştir.
 
-### 25.2. İptal sonrası bildirimler
+Örneğin:
+
+```text
+Başvuru başlangıcı
+        ↓
+Etkinlik başlangıcı
+```
+
+arasında minimum bir süre zorunlu olup olmayacağı daha sonra belirlenebilir.
+
+---
+
+## 25.2. Etkinlik tarihi değiştirildiğinde başvuru tarihleri
+
+Etkinlik tarihi değiştirildiğinde mevcut:
+
+* Başvuru başlangıç tarihi
+* Başvuru bitiş tarihi
+
+ile yeni etkinlik tarihi arasındaki ilişkinin sistem tarafından nasıl ele alınacağı ayrıca netleştirilebilir.
+
+Temel kural olarak başvuru bitişi etkinlik başlangıcından sonra olamaz.
+
+---
+
+## 25.3. İptal sonrası bildirimler
 
 Etkinlik iptal edildiğinde öğrencilere gönderilecek bildirimler henüz belirlenmemiştir.
 
-Bildirim davranışları ayrı bir use case kapsamında ele alınacaktır.
+Örneğin:
 
-### 25.3. Silinen etkinliklerin denetim kaydı
+* ACCEPTED öğrenciler
+* WAITLISTED öğrenciler
+* PENDING öğrenciler
+
+için bildirim gönderilip gönderilmeyeceği bildirim use case'i kapsamında ele alınacaktır.
+
+---
+
+## 25.4. Silinen etkinliklerin denetim kaydı
 
 Başvuru başlamadan ve hiç başvuru almadan silinen etkinliklerin sistemsel audit/log kaydının tutulup tutulmayacağı henüz ayrıca belirlenmemiştir.
+
+Event kaydı fiziksel olarak silinse bile teknik loglarda işlem geçmişinin tutulup tutulmayacağı ayrıca değerlendirilebilir.
+
+---
+
+## 25.5. Etkinlik tamamlanma zamanı
+
+Etkinliğin `COMPLETED` durumuna tam olarak ne zaman geçirileceği henüz kesinleştirilmemiştir.
+
+Örneğin:
+
+```text
+Etkinlik bitiş zamanı geldi
+        ↓
+COMPLETED
+```
+
+şeklinde otomatik geçiş yapılması değerlendirilebilir.
+
+---
+
+## 25.6. Etkinlik zamanı değiştirildiğinde mevcut başvurular
+
+Etkinlik başlangıç veya bitiş zamanının değiştirilmesinin:
+
+* Mevcut `ACCEPTED` başvurulara
+* `WAITLISTED` başvurulara
+* `PENDING` başvurulara
+* Attendance sürecine
+
+etkisinin ne olacağı ayrıca netleştirilebilir.
+
+Bu değişikliklerin kullanıcıya bildirilmesi de bildirim use case'i kapsamında değerlendirilebilir.
 
 ---
 
@@ -722,3 +1009,22 @@ Bu use case aşağıdaki use case'lerle doğrudan ilişkilidir:
 
 * **Use Case 01 — Öğrencinin Etkinliğe Başvurması ve Katılması**
 * **Use Case 03 — Kulübün Etkinlik Başvurularını Yönetmesi**
+
+Use Case 01 özellikle:
+
+* Başvuru oluşturma
+* `PUBLIC` / `APPROVAL_REQUIRED` davranışları
+* `PENDING`
+* `ACCEPTED`
+* `REJECTED`
+* `WAITLISTED`
+* `WITHDRAWN`
+* Kapasite
+* Bekleme listesi
+* Başvuru geri çekme
+* Yeniden başvurma
+* Attendance
+
+kurallarını ele alır.
+
+Use Case 03 ise özellikle kulüp yöneticisinin mevcut başvuruları değerlendirmesi ve başvuru durumlarını yönetmesiyle ilgilidir.
