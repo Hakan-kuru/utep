@@ -174,3 +174,28 @@ Aşağıdaki özellikler mevcut MVP kapsamında değildir:
 * Kulüp / etkinlik takip sistemi
 * Gelişmiş keşif ve öneri sistemi
 * E-posta / SMS bildirimleri
+
+## 18. Kullanıcı ve Öğrenci Numarası Kuralları
+
+* Her kullanıcı bir üniversiteye bağlıdır.
+* Öğrenci numarası üniversite kapsamında benzersizdir.
+* Aynı öğrenci numarası farklı üniversitelerde bulunabilir.
+* Bu nedenle öğrenci numarası sistem genelinde tek başına benzersiz değildir.
+* Aynı üniversite içerisinde aynı öğrenci numarasına sahip iki farklı kullanıcı bulunamaz.
+
+Örneğin:
+
+```text
+Fırat Üniversitesi + 123456 → Kullanıcı A
+Fırat Üniversitesi + 123456 → ❌
+
+İTÜ + 123456 → Kullanıcı B
+```
+
+Dolayısıyla veri modelinde öğrenci numarası için benzersizlik kuralı:
+
+```text
+University + studentNumber
+```
+
+birlikteliği üzerinden sağlanmalıdır.
