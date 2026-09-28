@@ -287,6 +287,107 @@ ClubMember
 
 A user may belong to multiple clubs and may have different roles in different clubs.
 
+`joinedAt` represents the beginning of a membership/role period.
+
+`leftAt` represents the end of that membership/role period.
+
+```text
+leftAt = NULL  → active membership/role period
+leftAt != NULL → historical membership/role period
+```
+
+A `ClubMember` record therefore represents a **specific membership/role period**, rather than the complete lifetime relationship between a user and a club.
+
+Historical membership and role periods are preserved rather than deleted.
+
+### Kulüpten ayrılma
+
+When a user leaves a club, the active `ClubMember` record is closed by setting:
+
+```text
+leftAt = currentTime
+```
+
+The historical record is retained.
+
+### Yeniden katılma
+
+If the user later rejoins the same club, the historical `ClubMember` record is not reused or overwritten.
+
+A new `ClubMember` record is created.
+
+```text
+ClubMember #1
+role = MANAGER
+joinedAt = 2026-01-01
+leftAt   = 2026-05-01
+
+ClubMember #2
+role = MANAGER
+joinedAt = 2026-09-01
+leftAt   = NULL
+```
+
+### Rol değişikliği
+
+If a user's role within a club changes, the current `ClubMember` record is closed and a new record is created with the new role.
+
+For example:
+
+```text
+ClubMember #1
+role = MANAGER
+joinedAt = 2026-01-01
+leftAt   = 2026-06-01
+
+ClubMember #2
+role = PRESIDENT
+joinedAt = 2026-06-01
+leftAt   = NULL
+```
+
+This preserves role history.
+
+Changing a role does not create a new `User` account.
+
+### Aktif üyelik kuralı
+
+A user may have multiple historical `ClubMember` records for the same club.
+
+However, a user cannot have more than one active membership/role record for the same club.
+
+```text
+Same user + same club
+        ↓
+0..N historical records
+        +
+0..1 active record
+```
+
+Business/database rule:
+
+> A user can have multiple historical membership records for the same club.
+
+> A user cannot have more than one active membership record for the same club.
+
+The database should enforce the second rule with a **partial unique constraint/index** on:
+
+```text
+(user_id, club_id)
+WHERE leftAt IS NULL
+```
+
+This allows rejoining and role history while preventing multiple simultaneous active `ClubMember` records.
+```
+
+`role`:
+
+* `PRESIDENT`
+* `VICE_PRESIDENT`
+* `MANAGER`
+
+A user may belong to multiple clubs and may have different roles in different clubs.
+
 `leftAt = NULL` means that the membership is currently active.
 
 Historical memberships are preserved rather than deleted.
@@ -498,6 +599,31 @@ Attendance → Application → Event
 ```
 
 A direct `eventId` may be considered in the future if reporting/query performance or a separate reporting model makes it necessary.
+
+### ClubMember lifecycle
+
+`ClubMember` represents a membership/role period. Historical records are retained.
+
+```text
+leftAt = NULL  → active membership/role period
+leftAt != NULL → historical membership/role period
+```
+
+Rejoining a club creates a new `ClubMember` record.
+
+Changing a user's role within a club closes the current record and creates a new record with the new role.
+
+At most one active `ClubMember` record may exist for the same user and club.
+
+The database should enforce this with a partial unique constraint/index on:
+
+```text
+(user_id, club_id)
+WHERE leftAt IS NULL
+```
+
+This allows multiple historical records while ensuring that only one active membership/role record exists for a given user and club.
+
 
 ### Notifications
 

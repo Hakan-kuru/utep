@@ -208,21 +208,114 @@ Rol değişikliği kullanıcının kulüp ile olan ilişkisi üzerinden gerçekl
 
 ---
 
-# 8. Kulüp Yönetim Geçmişi
+# 8. Kulüp Üyelik ve Yönetim Geçmişi
 
-Kulüp içerisindeki yönetici değişiklikleri geçmişe dönük olarak kayıt altına alınacaktır.
+`ClubMember` kaydı, kullanıcının kulüpteki belirli bir üyelik/rol dönemini temsil eder. Bu kayıt yalnızca kullanıcının o anki rolünü değil, geçmişteki üyelik ve rol değişikliklerini de koruyacak şekilde tasarlanmalıdır.
 
-Sistemin ileride aşağıdaki bilgileri tutabilmesi hedeflenmektedir:
+Her kayıt için temel olarak:
 
 * Kullanıcı
 * Kulüp
 * Rol
-* Rolün başlangıç tarihi
-* Rolün bitiş tarihi
+* Rol/üyelik başlangıç tarihi (`joinedAt`)
+* Rol/üyelik bitiş tarihi (`leftAt`)
 
-Bu kayıtların başlangıçta kullanıcı arayüzünde gösterilmesi zorunlu değildir.
+tutulur.
 
-Ancak sistem, kulübün geçmişte kim tarafından ve hangi tarihler arasında yönetildiğini kaybedemeyecek şekilde tasarlanmalıdır.
+```text
+leftAt = NULL  → aktif üyelik/rol dönemi
+leftAt != NULL → geçmiş üyelik/rol dönemi
+```
+
+## 8.1. Kulüpten Ayrılma
+
+Kullanıcı kulüpten ayrıldığında mevcut `ClubMember` kaydı silinmez.
+
+`leftAt` alanı doldurularak kayıt geçmişte tutulur.
+
+## 8.2. Yeniden Katılma
+
+Kullanıcı daha sonra aynı kulübe tekrar katılırsa eski `ClubMember` kaydı yeniden kullanılmaz.
+
+Yeni bir `ClubMember` kaydı oluşturulur.
+
+Örneğin:
+
+```text
+ClubMember #1
+MANAGER
+joinedAt = 2026-01-01
+leftAt   = 2026-05-01
+
+↓ yeniden katılma
+
+ClubMember #2
+MANAGER
+joinedAt = 2026-09-01
+leftAt   = NULL
+```
+
+Bu sayede önceki üyelik dönemi korunur.
+
+## 8.3. Rol Değişikliği
+
+Kullanıcının kulüp içindeki rolü değiştiğinde mevcut `ClubMember` kaydı üzerinde yalnızca `role` alanının değiştirilmesi yerine mevcut rol dönemi kapatılır ve yeni rol için yeni bir `ClubMember` kaydı oluşturulur.
+
+Örneğin:
+
+```text
+MANAGER
+    ↓
+leftAt = 2026-06-01
+    ↓
+PRESIDENT
+```
+
+Yeni kayıt:
+
+```text
+ClubMember #1
+MANAGER
+joinedAt = 2026-01-01
+leftAt   = 2026-06-01
+
+ClubMember #2
+PRESIDENT
+joinedAt = 2026-06-01
+leftAt   = NULL
+```
+
+şeklinde tutulabilir.
+
+Böylece rol geçmişi de üyelik geçmişi gibi korunur.
+
+Rol değişikliği ve yeniden katılma işlemleri yeni kullanıcı hesabı oluşturmaz; mevcut `User` hesabı kullanılmaya devam eder.
+
+## 8.4. Aktif Üyelik Kuralı
+
+Bir kullanıcı aynı kulüpte birden fazla geçmiş `ClubMember` kaydına sahip olabilir.
+
+Ancak aynı anda yalnızca bir aktif kayıt bulunabilir.
+
+```text
+Aynı user + aynı club
+        ↓
+0 veya daha fazla historical record
+        +
+en fazla 1 active record (leftAt = NULL)
+```
+
+Bu kuralın veritabanı seviyesinde de korunması hedeflenmektedir.
+
+Database, `(userId, clubId)` ikilisini yalnızca `leftAt IS NULL` olan kayıtlar arasında benzersiz tutmalıdır.
+
+Bu yapı, kullanıcının:
+
+* kulübe yeniden katılmasına,
+* kulüp içindeki rolünün zaman içinde değişmesine,
+* geçmiş üyelik ve rol kayıtlarının korunmasına
+
+izin verirken aynı anda birden fazla aktif kulüp rolünün oluşmasını engeller.
 
 ---
 
